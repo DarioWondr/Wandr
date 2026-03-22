@@ -42,3 +42,6 @@ export default async function handler(req) {
     });
   }
 }
+const data = await response.json();
+console.log('Anthropic error:', JSON.stringify(data)); // añade esto
+return new Response(JSON.stringify(data), {
