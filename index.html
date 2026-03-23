@@ -1587,6 +1587,12 @@ function renderMisViajes() {
 // ═══════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════
+function setBottomNav(v) {
+  document.querySelectorAll('.bottom-nav-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('bnav-' + v);
+  if (btn) btn.classList.add('active');
+}
+
 function switchView(v) {
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el=>el.classList.remove('active'));
