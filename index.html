@@ -923,7 +923,7 @@ async function checkAI(id) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5',
+        model: 'claude-haiku-4-5-20251001',,
         max_tokens: 1000,
         system: 'Eres un analizador de compatibilidad entre viajeros. Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin markdown, sin backticks.',
         messages: [{ role: 'user', content: `Analiza compatibilidad. Devuelve SOLO JSON:
