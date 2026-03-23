@@ -1481,56 +1481,35 @@ window.addEventListener('unhandledrejection', e => {
 });
 
 // Session keepalive + WebSocket recovery on visibility change
+// Session recovery on visibility change — sin recrear el cliente
 document.addEventListener('visibilitychange', async () => {
-  if (!document.hidden) {
+  if (!document.hidden && sb) {
     try {
-      if (!sb) return;
-      // Reinitializar cliente Supabase si el WebSocket murió
-      sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
       const { data } = await sb.auth.getSession();
-      if (data?.session) {
+      if (data?.session && state.user) {
+        await loadTrips();
+        renderTrips(); renderStats(); renderPopular();
+      } else if (data?.session && !state.user) {
         state.user = data.session.user;
         await loadProfile(state.user.id);
         await loadTrips();
         updateNavAvatar();
-        renderTrips();
-        renderStats();
-        renderPopular();
-        // Reconectar chat si estaba activo
-        if (state.activeChatTripId) {
-          if (state.chatSubscription) {
-            try { sb.removeChannel(state.chatSubscription); } catch(e) {}
-            state.chatSubscription = null;
-          }
-          await renderChatArea(state.activeChatTripId);
-          state.chatSubscription = sb.channel(`chat-${state.activeChatTripId}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `trip_id=eq.${state.activeChatTripId}` }, payload => appendMessage(payload.new))
-            .subscribe();
-        }
-      } else if (state.user) {
-        state.user = null;
-        state.profile = null;
-        state.myTripIds = [];
-        state.joinedTripIds = [];
-        updateNavAvatar();
-        renderTrips();
-        renderStats();
+        renderTrips(); renderStats(); renderPopular();
+      } else if (!data?.session && state.user) {
+        state.user = null; state.profile = null;
+        state.myTripIds = []; state.joinedTripIds = [];
+        updateNavAvatar(); renderTrips(); renderStats();
       }
-    } catch(e) {
-      console.warn('Recovery error:', e);
-    }
+    } catch(e) { console.warn('Recovery error:', e); }
   }
 });
 
-// Refresh session token every 8 min
+// Refresh token cada 8 min
 setInterval(async () => {
-  if (sb && state.user) {
-    try { await sb.auth.refreshSession(); } catch(e) {}
-  }
+  if (sb && state.user) { try { await sb.auth.refreshSession(); } catch(e) {} }
 }, 8 * 60 * 1000);
 
 try { init(); } catch(e) { console.error('Init error:', e); hideLoading(); }
 </script>
 </body>
 </html>
-
