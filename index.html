@@ -5,17 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Wandr — Encuentra tu compañero de viaje</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<script>
-// ╔══════════════════════════════════════════╗
-// ║  CONFIGURACIÓN — Pon tus claves aquí     ║
-// ║  Supabase Dashboard > Settings > API     ║
-// ╚══════════════════════════════════════════╝
-const SUPABASE_URL  = 'https://cwocdimaaxrhshloqrzq.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3b2NkaW1hYXhyaHNobG9xcnpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxODg5MjMsImV4cCI6MjA4OTc2NDkyM30.ADkyFHicjTKL2MbTdwtuusG79I44YwzpQfU5F2TVph4';
-</script>
-
 <style>
 :root{--sand:#F5EDD8;--terra:#C4622D;--bark:#3D2314;--dusk:#7B5C3E;--moss:#4A5E40;--sky:#6B8EA6;--cream:#FBF7EF;--smoke:#E8DFC8}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -689,7 +678,7 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 3
   <p id="loadingMsg" style="font-family:'Playfair Display',serif;font-size:16px;color:var(--dusk)">Cargando...</p>
 </div>
 
-<script defer>
+<script>
 // ═══════════════════════════════════════
 // SUPABASE CLIENT
 // ═══════════════════════════════════════
@@ -1656,7 +1645,22 @@ setInterval(async () => {
   if (sb && state.user) { try { await sb.auth.refreshSession(); } catch(e) {} }
 }, 8 * 60 * 1000);
 
-try { init(); } catch(e) { console.error('Init error:', e); hideLoading(); }
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    try { init(); } catch(e) { console.error('Init error:', e); hideLoading(); }
+  });
+} else {
+  try { init(); } catch(e) { console.error('Init error:', e); hideLoading(); }
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ╔══════════════════════════════════════════╗
+// ║  CONFIGURACIÓN — Pon tus claves aquí     ║
+// ║  Supabase Dashboard > Settings > API     ║
+// ╚══════════════════════════════════════════╝
+const SUPABASE_URL  = 'https://cwocdimaaxrhshloqrzq.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3b2NkaW1hYXhyaHNobG9xcnpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxODg5MjMsImV4cCI6MjA4OTc2NDkyM30.ADkyFHicjTKL2MbTdwtuusG79I44YwzpQfU5F2TVph4';
 </script>
 </body>
 </html>
