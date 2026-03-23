@@ -630,7 +630,10 @@ let state = {
   activeChatTripId: null,
   chatSubscription: null,
   obStyle: '',
-  authCallback: null
+  authCallback: null,
+  isRecovering: false,
+  lastRecoveryAt: 0,
+  authListenerInitialized: false
 };
 
 // ═══════════════════════════════════════
@@ -640,52 +643,112 @@ async function init() {
   showLoading('Cargando Wandr...');
 
   if (!sb) {
-    // Demo mode sin Supabase
     state.trips = getDemoTrips();
-    hideLoading();
     renderTrips();
     renderStats();
     renderPopular();
+    hideLoading();
     return;
   }
 
-  // Auth state
-  const { data: { session } } = await sb.auth.getSession();
-  if (session?.user) {
-    state.user = session.user;
-    await loadProfile(session.user.id);
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    await hydrateApp({ session, allowOnboarding: false });
+
+    if (!state.authListenerInitialized) {
+      sb.auth.onAuthStateChange(async (event, session) => {
+        await handleAuthStateChange(event, session);
+      });
+      state.authListenerInitialized = true;
+    }
+  } catch (e) {
+    console.error('init error', e);
+  } finally {
+    hideLoading();
+  }
+}
+
+
+function isOnboardingIncomplete(profile) {
+  return !!profile && !profile.bio && !profile.style;
+}
+
+function syncCurrentView() {
+  const misViajesView = document.getElementById('view-mis-viajes');
+  const chatView = document.getElementById('view-chat');
+
+  if (misViajesView?.classList.contains('active')) renderMisViajes();
+
+  if (chatView?.classList.contains('active')) {
+    renderChatList();
+    if (!state.user) {
+      document.getElementById('chatArea').innerHTML = `<div class="chat-empty"><div style="font-size:36px">🔐</div><div style="font-size:15px;color:var(--bark)">Inicia sesión para chatear</div><button class="btn btn-primary" style="margin-top:8px" onclick="openModal('authModal')">Entrar</button></div>`;
+    } else if (state.activeChatTripId) {
+      renderChatArea(state.activeChatTripId).catch(err => console.warn('renderChatArea sync error:', err));
+    }
+  }
+}
+
+async function hydrateApp({ session = null, allowOnboarding = false } = {}) {
+  state.user = session?.user || null;
+
+  if (state.user) {
+    await loadProfile(state.user.id, { allowOnboarding });
+    await loadTrips();
+  } else {
+    state.profile = null;
+    state.myTripIds = [];
+    state.joinedTripIds = [];
+    state.activeChatTripId = null;
+    if (state.chatSubscription && sb) {
+      sb.removeChannel(state.chatSubscription);
+      state.chatSubscription = null;
+    }
   }
 
-  sb.auth.onAuthStateChange(async (event, session) => {
-    state.user = session?.user || null;
-    if (state.user) {
-      await loadProfile(state.user.id);
-      await loadTrips();
-      updateNavAvatar();
-      renderTrips();
-      renderStats();
-      renderPopular();
-      // Onboarding solo tras SIGNED_IN confirmado
-      if (event === 'SIGNED_IN' && state.profile && !state.profile.bio && !state.profile.style) {
-        setTimeout(() => openModal('onboardingModal'), 500);
-      }
-      if (state.authCallback) { state.authCallback(); state.authCallback = null; }
-    } else {
-      state.profile = null;
-      state.myTripIds = [];
-      state.joinedTripIds = [];
-      updateNavAvatar();
-      renderTrips();
-      renderStats();
-    }
-  });
-
-  await loadTrips();
   updateNavAvatar();
   renderTrips();
   renderStats();
   renderPopular();
-  hideLoading();
+  syncCurrentView();
+}
+
+async function handleAuthStateChange(event, session) {
+  if (state.isRecovering) return;
+  state.isRecovering = true;
+  try {
+    await hydrateApp({ session, allowOnboarding: event === 'SIGNED_IN' });
+    if (state.user && state.authCallback) {
+      const cb = state.authCallback;
+      state.authCallback = null;
+      cb();
+    }
+  } catch (e) {
+    console.error('handleAuthStateChange error:', e);
+  } finally {
+    hideLoading();
+    state.isRecovering = false;
+  }
+}
+
+async function recoverFromIdle() {
+  if (state.isRecovering || !sb) return;
+  const now = Date.now();
+  if (now - state.lastRecoveryAt < 1500) return;
+  state.lastRecoveryAt = now;
+  state.isRecovering = true;
+
+  try {
+    showLoading('Reconectando...');
+    const { data: { session } } = await sb.auth.getSession();
+    await hydrateApp({ session, allowOnboarding: false });
+  } catch (e) {
+    console.warn('recoverFromIdle error:', e);
+  } finally {
+    hideLoading();
+    state.isRecovering = false;
+    unlockUiSafely();
+  }
 }
 
 // ═══════════════════════════════════════
@@ -755,13 +818,18 @@ async function doLogout() {
 // ═══════════════════════════════════════
 // PROFILE
 // ═══════════════════════════════════════
-async function loadProfile(userId) {
-  if (!sb) return;
-  const { data } = await sb.from('profiles').select('*').eq('id', userId).single();
-  if (data) {
-    state.profile = data;
-    if (!data.bio && !data.style) setTimeout(() => openModal('onboardingModal'), 500);
+async function loadProfile(userId, { allowOnboarding = false } = {}) {
+  if (!sb || !userId) return null;
+  const { data, error } = await sb.from('profiles').select('*').eq('id', userId).single();
+  if (error) {
+    console.warn('loadProfile error:', error.message || error);
+    return null;
   }
+  state.profile = data || null;
+  if (allowOnboarding && state.profile && !state.profile.bio && !state.profile.style) {
+    setTimeout(() => openModal('onboardingModal'), 300);
+  }
+  return state.profile;
 }
 
 let obStep = 1;
@@ -1290,11 +1358,16 @@ async function sendMsg(id) {
 // ═══════════════════════════════════════
 let profileEditStyle = '';
 
+function closeAllModals() {
+  document.querySelectorAll('.modal-overlay.open').forEach(el => el.classList.remove('open'));
+  document.body.style.overflow = '';
+}
+
 function openModal(id) {
   if (id === 'profileModal' && state.profile) {
     const p = state.profile;
     document.getElementById('profile-email-label').textContent = state.user?.email || '';
-    document.getElementById('profile-name').value = p.name || '';
+    document.getElementById('profile-name').value = p.name || p.full_name || '';
     document.getElementById('profile-age').value  = p.age  || '';
     document.getElementById('profile-bio').value  = p.bio  || '';
     profileEditStyle = p.style || '';
@@ -1306,9 +1379,14 @@ function openModal(id) {
       pill.classList.toggle('active', userInterests.some(i => pill.textContent.trim().includes(i) || i.includes(pill.textContent.trim().replace(/^[^\w]+/,''))));
     });
   }
+  closeAllModals();
   const el = document.getElementById(id);
-  if (el) { el.classList.add('open'); document.body.style.overflow = 'hidden'; }
+  if (el) {
+    el.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
 }
+
 
 function selectProfileStyle(el, val) {
   document.querySelectorAll('#profile-style-options .style-opt').forEach(o => o.classList.remove('active'));
@@ -1502,7 +1580,20 @@ function switchView(v) {
 // ═══════════════════════════════════════
 // MODALS
 // ═══════════════════════════════════════
-function closeModal(id) { document.getElementById(id).classList.remove('open'); document.body.style.overflow=''; }
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('open');
+  if (!document.querySelector('.modal-overlay.open')) document.body.style.overflow = '';
+}
+
+function unlockUiSafely() {
+  hideLoading();
+  const loading = document.getElementById('loadingOverlay');
+  if (loading) loading.classList.remove('show');
+  const hasOpenModal = !!document.querySelector('.modal-overlay.open');
+  document.body.style.overflow = hasOpenModal ? 'hidden' : '';
+}
+
 document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if(e.target===m) closeModal(m.id); }));
 
 // ═══════════════════════════════════════
@@ -1519,42 +1610,31 @@ function showToast(msg) { const t=document.getElementById('toast'); document.get
 function showLoading(msg) { document.getElementById('loadingMsg').textContent=msg||'Cargando...'; document.getElementById('loadingOverlay').classList.add('show'); }
 function hideLoading() { document.getElementById('loadingOverlay').classList.remove('show'); }
 
-// Global error handler to prevent UI freeze
+window.addEventListener('error', e => {
+  console.error('Unhandled sync error:', e.error || e.message);
+  unlockUiSafely();
+});
+
 window.addEventListener('unhandledrejection', e => {
   console.warn('Unhandled promise rejection:', e.reason);
   e.preventDefault();
+  unlockUiSafely();
 });
 
-// Session keepalive + WebSocket recovery on visibility change
-// Session recovery on visibility change — sin recrear el cliente
-document.addEventListener('visibilitychange', async () => {
-  if (!document.hidden && sb) {
-    try {
-      const { data } = await sb.auth.getSession();
-      if (data?.session && state.user) {
-        await loadTrips();
-        renderTrips(); renderStats(); renderPopular();
-      } else if (data?.session && !state.user) {
-        state.user = data.session.user;
-        await loadProfile(state.user.id);
-        await loadTrips();
-        updateNavAvatar();
-        renderTrips(); renderStats(); renderPopular();
-      } else if (!data?.session && state.user) {
-        state.user = null; state.profile = null;
-        state.myTripIds = []; state.joinedTripIds = [];
-        updateNavAvatar(); renderTrips(); renderStats();
-      }
-    } catch(e) { console.warn('Recovery error:', e); }
-  }
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) recoverFromIdle();
 });
 
-// Refresh token cada 8 min
-setInterval(async () => {
-  if (sb && state.user) { try { await sb.auth.refreshSession(); } catch(e) {} }
-}, 8 * 60 * 1000);
+window.addEventListener('focus', () => {
+  recoverFromIdle();
+});
 
-try { init(); } catch(e) { console.error('Init error:', e); hideLoading(); }
+try {
+  init();
+} catch(e) {
+  console.error('Init error:', e);
+  unlockUiSafely();
+}
 </script>
 </body>
 </html>
