@@ -900,7 +900,7 @@ function renderTrips() {
             </div>
           </div>
           <div class="trip-actions">
-            <button class="action-btn btn-chat" onclick="openChatForTrip('${t.id}')" title="Chat">💬</button>
+            ${(state.joinedTripIds.includes(t.id)||state.myTripIds.includes(t.id)) ? `<button class="action-btn btn-chat" onclick="openChatForTrip('${t.id}')" title="Chat">💬</button>` : ''}
             <button class="action-btn btn-ai"   onclick="checkAI('${t.id}')">🤖 Match</button>
             <button class="action-btn btn-join ${joined?'joined':''}" onclick="joinTrip('${t.id}')">${joined?'✓ Unido':'Unirse'}</button>
           </div>
@@ -922,7 +922,11 @@ function renderPopular() {
   const map = {};
   state.trips.forEach(t => { map[t.dest] = map[t.dest] || { t, cnt:0 }; map[t.dest].cnt++; });
   const top = Object.values(map).sort((a,b)=>b.cnt-a.cnt).slice(0,5);
-  document.getElementById('popularDests').innerHTML = top.map(({t})=>`<div class="popular-row" onclick="quickSearch('${san(t.dest.split(',')[0])}')"><span style="font-size:18px;flex-shrink:0">${t.emoji}</span><div class="popular-dest">${t.dest}</div><span style="font-size:10px;color:var(--dusk)">${t.companions.length+1}✈</span></div>`).join('');
+  const popEl = document.getElementById('popularDests');
+  popEl.innerHTML = top.map(({t})=>`<div class="popular-row" data-dest="${san(t.dest.split(',')[0])}"><span style="font-size:18px;flex-shrink:0">${t.emoji}</span><div class="popular-dest">${san(t.dest)}</div><span style="font-size:10px;color:var(--dusk)">${t.companions.length+1}✈</span></div>`).join('');
+  popEl.querySelectorAll('.popular-row').forEach(row => {
+    row.addEventListener('click', () => quickSearch(row.dataset.dest));
+  });
 }
 
 function filterBySearch() { state.searchQuery = document.getElementById('heroSearch').value; renderTrips(); }
@@ -937,6 +941,7 @@ document.getElementById('heroSearch').addEventListener('keydown', e => { if(e.ke
 async function joinTrip(id) {
   if (!state.user) { requireAuth(() => joinTrip(id)); return; }
   if (state.joinedTripIds.includes(id)) { showToast('Ya eres parte de este viaje 🎉'); return; }
+  if (state.myTripIds.includes(id)) { showToast('Eres el organizador de este viaje'); return; }
 
   const trip = state.trips.find(t => t.id === id);
   if (!trip) return;
@@ -951,9 +956,11 @@ async function joinTrip(id) {
   }
 
   state.joinedTripIds.push(id);
-  trip.companions.push({ name, bio, emoji: name[0] });
+  trip.companions.push({ name, bio, emoji: name[0], user_id: state.user.id });
   renderTrips(); renderStats();
   showToast(`✈ ¡Te uniste al viaje a ${trip.dest}!`);
+  // Rehidratar desde DB para garantizar consistencia
+  if (sb) loadTrips().then(() => { renderTrips(); renderStats(); });
 }
 
 // ═══════════════════════════════════════
@@ -1021,15 +1028,15 @@ function openDetail(id) {
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;margin-top:4px">
         <button class="action-btn btn-ai" onclick="checkAI('${t.id}')">🤖 Match IA</button>
-        <button class="action-btn btn-chat" onclick="closeModal('detailModal');openChatForTrip('${t.id}')">💬 Chat</button>
+        ${(state.joinedTripIds.includes(t.id)||state.myTripIds.includes(t.id)) ? `<button class="action-btn btn-chat" onclick="closeModal('detailModal');openChatForTrip('${t.id}')">💬 Chat</button>` : ''}
       </div>
     </div>
     <p style="font-size:14px;line-height:1.7;color:#5a4a38;margin-bottom:12px">${san(t.desc)}</p>
-    <div>${(t.interests||[]).map(i=>`<span class="tag">${i}</span>`).join('')}</div>
+    <div>${(t.interests||[]).map(i=>`<span class="tag">${san(i)}</span>`).join('')}</div>
     <div class="section-title">Organizador</div>
     <div class="companion-item">
       <div class="avatar lg" style="background:${hc(t.name)}">${t.name[0]}</div>
-      <div class="companion-info"><div class="companion-name">${t.name}</div><div class="companion-bio">Organizador · ${t.region}</div></div>
+      <div class="companion-info"><div class="companion-name">${san(t.name)}</div><div class="companion-bio">Organizador · ${san(t.region)}</div></div>
 
     </div>
     <div class="section-title">Compañeros (${t.companions.length})</div>
@@ -1473,13 +1480,38 @@ window.addEventListener('unhandledrejection', e => {
   e.preventDefault();
 });
 
-// Re-render on visibility change (fixes stale UI after tab switch)
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && state.trips.length > 0) {
-    renderTrips();
-    renderStats();
+// Session keepalive + re-render on visibility change
+document.addEventListener('visibilitychange', async () => {
+  if (!document.hidden) {
+    if (sb) {
+      // Refresh session silently — fixes buttons dying after idle
+      const { data } = await sb.auth.getSession();
+      if (data?.session && !state.user) {
+        state.user = data.session.user;
+        await loadProfile(state.user.id);
+        await loadTrips();
+        updateNavAvatar();
+      } else if (!data?.session && state.user) {
+        state.user = null;
+        state.profile = null;
+        state.myTripIds = [];
+        state.joinedTripIds = [];
+        updateNavAvatar();
+      }
+    }
+    if (state.trips.length > 0) {
+      renderTrips();
+      renderStats();
+    }
   }
 });
+
+// Periodic session refresh every 10 min to prevent token expiry
+setInterval(async () => {
+  if (sb && state.user) {
+    await sb.auth.refreshSession();
+  }
+}, 10 * 60 * 1000);
 
 try { init(); } catch(e) { console.error('Init error:', e); hideLoading(); }
 </script>
