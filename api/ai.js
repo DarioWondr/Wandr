@@ -32,10 +32,18 @@ function safeString(value, max = 500) {
   return String(value || '').trim().slice(0, max);
 }
 
+function cleanListItem(value) {
+  return safeString(value, 160)
+    .replace(/^[•\-–—*\u2022]+\s*/, '')
+    .replace(/^\d+[.)-]?\s*/, '')
+    .replace(/^"|"$/g, '')
+    .trim();
+}
+
 function safeArray(value, maxItems = 8, maxLen = 60) {
   if (!Array.isArray(value)) return [];
   return value
-    .map(item => safeString(item, maxLen))
+    .map(item => cleanListItem(String(item || '').slice(0, maxLen)))
     .filter(Boolean)
     .slice(0, maxItems);
 }
@@ -46,6 +54,14 @@ function stripCodeFences(text) {
     .replace(/^```\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
+}
+
+function extractJSONObject(text) {
+  const clean = stripCodeFences(text);
+  const start = clean.indexOf('{');
+  const end = clean.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) return null;
+  return clean.slice(start, end + 1);
 }
 
 function normalizeScore(value) {
@@ -75,8 +91,11 @@ function normalizeResult(parsed, profile, trip, rawText = '') {
   const pros = safeArray(parsed?.pros, 4, 120);
   const cons = safeArray(parsed?.cons, 4, 120);
 
+  const fallbackAdvice = 'Hablad antes de confirmar para alinear expectativas, presupuesto y ritmo del viaje.';
+  const rawAdvice = safeString(parsed?.advice || '', 220);
+  const adviceLooksBroken = /^\s*[{[]/.test(rawAdvice) || /"score"\s*:/.test(rawAdvice);
   const advice = safeString(
-    parsed?.advice || rawText || 'Hablad antes de confirmar para alinear expectativas, presupuesto y ritmo del viaje.',
+    adviceLooksBroken ? fallbackAdvice : (rawAdvice || fallbackAdvice),
     220
   );
 
@@ -198,7 +217,7 @@ export default async function handler(req) {
           generationConfig: {
             temperature: 0.4,
             maxOutputTokens: MAX_OUTPUT_TOKENS,
-            responseMimeType: 'text/plain',
+            responseMimeType: 'application/json',
           },
         }),
         signal: controller.signal,
