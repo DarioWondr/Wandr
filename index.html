@@ -204,16 +204,111 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 3
 .popular-row:hover .popular-dest{color:var(--terra)}
 .popular-dest{font-size:12px;font-weight:500;transition:color 0.15s;flex:1}
 
+/* ── TABLET ── */
+@media(max-width:900px){
+  .main{grid-template-columns:1fr;padding:20px}
+  .sidebar{display:none}
+}
+
+/* ── MOBILE ── */
 @media(max-width:768px){
-  .main{grid-template-columns:1fr;padding:16px}
-  .trip-card{grid-template-columns:1fr}
-  .trip-img{height:140px}
-  nav{padding:12px 16px}
+  /* Nav */
+  nav{padding:10px 16px;gap:8px}
+  .logo{font-size:20px}
   .nav-tabs{display:none}
-  .chat-layout{grid-template-columns:1fr}
-  .chat-list{display:none}
+  .nav-right{gap:6px}
+  #nav-user-name{display:none!important}
+  .btn-sm{padding:6px 12px;font-size:12px}
+  .profile-avatar{width:30px;height:30px;font-size:12px}
+
+  /* Hero */
+  .hero{padding:36px 16px 32px}
+  .hero-tag{font-size:10px;padding:4px 12px;margin-bottom:14px}
+  .hero p{font-size:14px;margin-bottom:22px}
+  .search-bar{padding:4px 4px 4px 14px}
+  .search-bar input{font-size:13px}
+  .search-bar button{padding:8px 14px;font-size:12px}
+
+  /* Stats */
+  .stats-bar{gap:16px;padding:12px 16px}
+  .stat-num{font-size:17px}
+  .stat-label{font-size:10px}
+
+  /* Main layout */
+  .main{grid-template-columns:1fr;padding:12px}
+  .sidebar{display:none}
+
+  /* Trip cards */
+  .trip-card{grid-template-columns:1fr}
+  .trip-img{height:130px;border-radius:0}
+  .trip-body{padding:14px}
+  .trip-dest{font-size:16px}
+  .trip-footer{flex-wrap:wrap;gap:8px}
+  .trip-actions{gap:4px}
+  .action-btn{padding:6px 10px;font-size:10px}
+
+  /* Feed header */
+  .feed-header{margin-bottom:14px}
+  .feed-header h2{font-size:18px}
+
+  /* Modals */
+  .modal{padding:24px 18px;border-radius:16px}
+  .modal h2{font-size:22px}
+  .modal.wide{max-width:100%}
   .form-row{grid-template-columns:1fr}
+  .modal-actions{flex-direction:column}
+  .modal-actions .btn{padding:13px}
+
+  /* Auth */
+  .auth-tabs{margin-bottom:18px}
+
+  /* Onboarding */
+  .style-options{grid-template-columns:1fr 1fr}
+  .style-opt{padding:10px}
+  .style-opt .icon{font-size:18px}
+
+  /* AI */
   .ai-pros-cons{grid-template-columns:1fr}
+  .ai-score-circle{width:76px;height:76px;font-size:22px}
+
+  /* Mis viajes */
+  .page-inner{padding:16px}
+  .page-title{font-size:22px}
+  .trips-grid-2{grid-template-columns:1fr}
+
+  /* Chat */
+  .chat-layout{grid-template-columns:1fr;height:calc(100vh - 56px)}
+  .chat-list{display:none}
+  .chat-area-header{padding:12px 16px}
+  .chat-messages{padding:14px 16px}
+  .chat-input-area{padding:10px 14px}
+
+  /* Companion items */
+  .companion-item{padding:10px}
+  .avatar.lg{width:38px;height:38px;font-size:14px}
+}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bark);padding:8px 0 max(8px,env(safe-area-inset-bottom));z-index:100;border-top:1px solid rgba(245,237,216,0.1);justify-content:space-around;align-items:center}
+.bottom-nav-btn{background:transparent;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 12px;cursor:pointer;color:rgba(245,237,216,0.45);transition:color 0.15s;min-width:48px}
+.bottom-nav-btn.active{color:var(--terra)}
+.bnav-icon{font-size:20px;line-height:1}
+.bnav-label{font-size:10px;font-family:'DM Sans',sans-serif;font-weight:500}
+.publish-btn{background:var(--terra);border-radius:50%;width:48px;height:48px;min-width:48px;padding:0;margin-bottom:8px;justify-content:center}
+.publish-btn .publish-icon{font-size:26px;color:white;font-style:normal;line-height:1}
+.publish-btn .bnav-label{display:none}
+@media(max-width:768px){
+  .bottom-nav{display:flex}
+  body{padding-bottom:64px}
+  .toast{bottom:80px}
+}
+
+/* ── SMALL MOBILE (iPhone SE, etc.) ── */
+@media(max-width:380px){
+  .hero h1{font-size:28px}
+  .trip-actions{flex-wrap:wrap}
+  .stats-bar{gap:10px}
+  .stat-num{font-size:15px}
 }
 </style>
 </head>
@@ -583,6 +678,29 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 3
     <div id="aiContent"><div class="ai-loading"><div class="spinner"></div></div></div>
   </div>
 </div>
+
+<!-- ══ BOTTOM NAV (mobile only) ══ -->
+<nav class="bottom-nav" id="bottomNav">
+  <button class="bottom-nav-btn active" id="bnav-explorar" onclick="switchView('explorar');setBottomNav('explorar')">
+    <span class="bnav-icon">✈</span>
+    <span class="bnav-label">Explorar</span>
+  </button>
+  <button class="bottom-nav-btn" id="bnav-mis-viajes" onclick="switchView('mis-viajes');setBottomNav('mis-viajes')">
+    <span class="bnav-icon">🎒</span>
+    <span class="bnav-label">Mis viajes</span>
+  </button>
+  <button class="bottom-nav-btn publish-btn" onclick="requireAuth(() => openModal('postModal'))">
+    <span class="bnav-icon publish-icon">+</span>
+  </button>
+  <button class="bottom-nav-btn" id="bnav-chat" onclick="switchView('chat');setBottomNav('chat')">
+    <span class="bnav-icon">💬</span>
+    <span class="bnav-label">Mensajes</span>
+  </button>
+  <button class="bottom-nav-btn" onclick="onAvatarClick()">
+    <span class="bnav-icon">👤</span>
+    <span class="bnav-label">Perfil</span>
+  </button>
+</nav>
 
 <div class="toast" id="toast"><span id="toastMsg"></span></div>
 <div class="loading-overlay" id="loadingOverlay">
@@ -1488,11 +1606,18 @@ function renderMisViajes() {
 // ═══════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════
+function setBottomNav(v) {
+  document.querySelectorAll('.bottom-nav-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('bnav-' + v);
+  if (btn) btn.classList.add('active');
+}
+
 function switchView(v) {
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   document.getElementById('tab-'+v).classList.add('active');
+  setBottomNav(v);
   if (v==='mis-viajes') renderMisViajes();
   if (v==='chat') { renderChatList(); if(!state.user) document.getElementById('chatArea').innerHTML=`<div class="chat-empty"><div style="font-size:36px">🔐</div><div style="font-size:15px;color:var(--bark)">Inicia sesión para chatear</div><button class="btn btn-primary" style="margin-top:8px" onclick="openModal('authModal')">Entrar</button></div>`; }
   if (v!=='chat' && state.chatSubscription) { sb?.removeChannel(state.chatSubscription); state.chatSubscription=null; }
