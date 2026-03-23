@@ -813,6 +813,8 @@ async function loadTrips() {
   if (state.user) {
     state.myTripIds     = state.trips.filter(t => t.user_id === state.user.id).map(t => t.id);
     state.joinedTripIds = state.trips.filter(t => (t.companions||[]).some(c => c.user_id === state.user.id)).map(t => t.id);
+    // Include own trips in joinedTripIds so chat works
+    state.myTripIds.forEach(id => { if (!state.joinedTripIds.includes(id)) state.joinedTripIds.push(id); });
   }
 }
 
@@ -829,7 +831,7 @@ function normalizeTrip(t) {
     email:       t.organizer_email || '',
     emoji:       t.emoji || REGION_EMOJI[t.region] || '✈',
     interests:   t.interests || [],
-    companions:  (t.companions || []).map(c => ({ name: c.name, bio: c.bio || '', emoji: (c.name||'?')[0] }))
+    companions:  (t.companions || []).map(c => ({ name: c.name, bio: c.bio || '', emoji: (c.name||'?')[0], user_id: c.user_id }))
   };
 }
 
@@ -1465,3 +1467,4 @@ try { init(); } catch(e) { console.error('Init error:', e); hideLoading(); }
 </script>
 </body>
 </html>
+
