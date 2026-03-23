@@ -918,42 +918,70 @@ async function checkAI(id) {
   document.getElementById('aiContent').innerHTML = `<div class="ai-loading"><div class="spinner"></div><p style="color:var(--dusk);font-size:13px;margin-top:8px">Analizando compatibilidad...</p></div>`;
   openModal('aiModal');
 
-  try {
-    const res = await fetch('/api/ai', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1000,
-        system: 'Eres un analizador de compatibilidad entre viajeros. Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin markdown, sin backticks.',
-        messages: [{ role: 'user', content: `Analiza compatibilidad. Devuelve SOLO JSON:
-{"score":85,"titulo":"Gran compatibilidad","resumen":"Dos frases.","pros":["razón 1","razón 2","razón 3"],"cons":["dificultad"],"consejo":"Consejo práctico."}
+  // Algoritmo de compatibilidad sin IA
+  const userInterests = new Set((profile.interests||[]).map(i=>i.toLowerCase().replace(/^[^\w]+/,'')));
+  const tripInterests = new Set((trip.interests||[]).map(i=>i.toLowerCase().replace(/^[^\w]+/,'')));
+  
+  // Intereses en común
+  const common = [...userInterests].filter(i => tripInterests.has(i));
+  const interestScore = tripInterests.size > 0 
+    ? Math.round((common.length / Math.max(userInterests.size, tripInterests.size)) * 40)
+    : 20;
 
-VIAJERO: Nombre: ${profile.name}, Estilo: ${profile.style||'no especificado'}, Intereses: ${(profile.interests||[]).join(', ')||'ninguno'}, Bio: ${profile.bio||'sin bio'}
-VIAJE: ${trip.dest} (${trip.region}), ${trip.start} al ${trip.end}, ${trip.type}, ${trip.desc}, Intereses: ${(trip.interests||[]).join(', ')}` }]
-      })
-    });
-    if (!res.ok) throw new Error(`API ${res.status}`);
-    const data = await res.json();
-    const raw = (data.content||[]).map(c=>c.text||'').join('').trim();
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON en respuesta');
-    const result = JSON.parse(match[0]);
-    const color = result.score>=80?'#4A5E40':result.score>=60?'#C4622D':'#c0392b';
+  // Compatibilidad de estilo con tipo de viaje
+  const styleMap = {
+    'Aventurero': ['Aventura'], 'Mochilero': ['Aventura','Cultural','Gastro'],
+    'Cultural': ['Cultural','Gastro'], 'Confort': ['Playa','Gastro','Cultural']
+  };
+  const styleMatch = (styleMap[profile.style||'Mochilero']||[]).includes(trip.type);
+  const styleScore = styleMatch ? 25 : 10;
+
+  // Bonus por bio
+  const bioScore = profile.bio ? 15 : 5;
+  
+  // Score final
+  const base = 30 + interestScore + styleScore + bioScore;
+  const score = Math.min(98, Math.max(45, base));
+
+  const pros = [];
+  const cons = [];
+  
+  if (common.length > 0) pros.push(`Comparten ${common.length} interés${common.length>1?'es':''}: ${common.slice(0,2).join(', ')}`);
+  if (styleMatch) pros.push(`Tu estilo "${profile.style}" encaja con viajes de tipo ${trip.type}`);
+  if (profile.bio) pros.push('Tienes perfil completo, generarás más confianza');
+  if (common.length === 0) cons.push('No coincidís en intereses declarados — hablad antes de uniros');
+  if (!styleMatch) cons.push(`Tu estilo "${profile.style||'Mochilero'}" puede diferir del enfoque del viaje`);
+  if (!profile.bio) cons.push('Completa tu bio para que el organizador te conozca mejor');
+  if (pros.length === 0) pros.push('Toda aventura compartida es una oportunidad de crecer');
+
+  const consejos = [
+    `Preséntate al organizador mencionando tu interés en ${trip.dest}.`,
+    'Propón una videollamada antes de confirmar para conoceros mejor.',
+    `Destaca tu experiencia viajando por ${trip.region} si la tienes.`,
+    'Sé claro sobre tu presupuesto y estilo desde el principio.'
+  ];
+  const consejo = consejos[Math.floor(score/25) % consejos.length];
+
+  const titulo = score>=80 ? 'Gran compatibilidad' : score>=65 ? 'Buena compatibilidad' : score>=50 ? 'Compatibilidad moderada' : 'Compatibilidad básica';
+  const resumen = common.length > 0
+    ? `Coincidís en ${common.slice(0,2).join(' y ')}. Vale la pena contactar al organizador.`
+    : `Distinto perfil pero complementario. El diálogo previo es clave.`;
+
+  const color = score>=80?'#4A5E40':score>=60?'#C4622D':'#c0392b';
+  
+  setTimeout(() => {
     document.getElementById('aiContent').innerHTML = `
       <div style="text-align:center;margin-bottom:20px">
-        <div class="ai-score-circle" style="background:${color}">${result.score}%</div>
-        <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:6px">${result.titulo}</div>
-        <div style="font-size:13px;color:var(--dusk)">${result.resumen}</div>
+        <div class="ai-score-circle" style="background:${color}">${score}%</div>
+        <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:6px">${titulo}</div>
+        <div style="font-size:13px;color:var(--dusk)">${resumen}</div>
       </div>
       <div class="ai-pros-cons">
-        <div class="ai-col"><div class="ai-col-title pro">✓ A favor</div><ul>${(result.pros||[]).map(p=>`<li>${p}</li>`).join('')}</ul></div>
-        <div class="ai-col"><div class="ai-col-title con">△ A tener en cuenta</div><ul>${(result.cons||[]).map(c=>`<li>${c}</li>`).join('')}</ul></div>
+        <div class="ai-col"><div class="ai-col-title pro">✓ A favor</div><ul>${pros.map(p=>`<li>${p}</li>`).join('')}</ul></div>
+        <div class="ai-col"><div class="ai-col-title con">△ A tener en cuenta</div><ul>${cons.map(c=>`<li>${c}</li>`).join('')}</ul></div>
       </div>
-      <div class="ai-consejo"><strong>💡 Consejo:</strong> ${result.consejo}</div>`;
-  } catch(err) {
-    document.getElementById('aiContent').innerHTML = `<div style="text-align:center;padding:24px"><div style="font-size:36px;margin-bottom:12px">⚠️</div><div style="font-size:13px;color:var(--dusk)">${err.message}</div><button class="btn btn-primary" style="margin-top:16px" onclick="checkAI('${id}')">Reintentar</button></div>`;
-  }
+      <div class="ai-consejo"><strong>💡 Consejo:</strong> ${consejo}</div>`;
+  }, 800); // pequeño delay para que se vea el spinner
 }
 
 // ═══════════════════════════════════════
