@@ -1141,13 +1141,33 @@ function openDetail(id) {
 // ═══════════════════════════════════════
 // AI COMPATIBILITY
 // ═══════════════════════════════════════
+function cleanAIList(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map(item => String(item || '')
+      .replace(/^[•\-–—*\u2022]+\s*/, '')
+      .replace(/^\d+[.)-]?\s*/, '')
+      .trim())
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
+function safeAIAdvice(value) {
+  const text = String(value || '').trim();
+  if (!text) return 'Hablad antes de confirmar para alinear expectativas.';
+  if (/^\s*[{[]/.test(text) || /"score"\s*:/.test(text)) {
+    return 'Hablad antes de confirmar para alinear expectativas, presupuesto y ritmo del viaje.';
+  }
+  return text;
+}
+
 function renderAIResult(result) {
   const score = Number(result?.score || 65);
   const title = san(result?.title || 'Compatibilidad moderada');
   const summary = san(result?.summary || 'Compatibilidad calculada para este viaje.');
-  const pros = Array.isArray(result?.pros) ? result.pros : [];
-  const cons = Array.isArray(result?.cons) ? result.cons : [];
-  const advice = san(result?.advice || 'Hablad antes de confirmar para alinear expectativas.');
+  const pros = cleanAIList(result?.pros);
+  const cons = cleanAIList(result?.cons);
+  const advice = san(safeAIAdvice(result?.advice));
 
   const color = score >= 80 ? '#4A5E40' : score >= 60 ? '#C4622D' : '#c0392b';
 
@@ -1162,13 +1182,13 @@ function renderAIResult(result) {
       <div class="ai-col">
         <div class="ai-col-title pro">Puntos a favor</div>
         <ul>
-          ${pros.length ? pros.map(p => `<li>${san(p)}</li>`).join('') : '<li>No hay ventajas claras destacadas.</li>'}
+          ${pros.length ? pros.map(p => `<li>${san(p)}</li>`).join('') : '<li>Buena base para conversar y validar expectativas.</li>'}
         </ul>
       </div>
       <div class="ai-col">
         <div class="ai-col-title con">Puntos a vigilar</div>
         <ul>
-          ${cons.length ? cons.map(c => `<li>${san(c)}</li>`).join('') : '<li>No hay riesgos importantes destacados.</li>'}
+          ${cons.length ? cons.map(c => `<li>${san(c)}</li>`).join('') : '<li>Aclara presupuesto, ritmo y plan antes de decidir.</li>'}
         </ul>
       </div>
     </div>
