@@ -1,43 +1,51 @@
 export const config = { runtime: 'edge' };
 
-function getCorsHeaders(req) {
-  const origin = req.headers.get('origin');
-  const sameOrigin = new URL(req.url).origin;
+const DEFAULT_MODEL = 'gemini-2.5-flash';
+const MAX_OUTPUT_TOKENS = 700;
+const MAX_TEXT_LENGTH = 12000;
 
-  const allowOrigin = !origin || origin === sameOrigin ? (origin || sameOrigin) : null;
+function corsHeaders(req) {
+  const requestOrigin = req.headers.get('origin');
+  const sameOrigin = new URL(req.url).origin;
+  const allowedOrigin = !requestOrigin || requestOrigin === sameOrigin ? (requestOrigin || sameOrigin) : null;
 
   return {
-    ok: !!allowOrigin,
+    ok: Boolean(allowedOrigin),
     headers: {
-      'Access-Control-Allow-Origin': allowOrigin || sameOrigin,
+      'Access-Control-Allow-Origin': allowedOrigin || sameOrigin,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
       'Vary': 'Origin',
+      'X-Content-Type-Options': 'nosniff',
     },
   };
 }
 
 function json(req, data, status = 200) {
-  const { headers } = getCorsHeaders(req);
+  const { headers } = corsHeaders(req);
   return new Response(JSON.stringify(data), { status, headers });
 }
 
+function safeString(value, max = 500) {
+  return String(value || '').trim().slice(0, max);
+}
+
+function safeArray(value, maxItems = 8, maxLen = 60) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(item => safeString(item, maxLen))
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
 function stripCodeFences(text) {
-  if (!text) return '';
-  return text
+  return String(text || '')
     .replace(/^```json\s*/i, '')
     .replace(/^```\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
-}
-
-function normalizeArray(value, max = 4) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map(v => String(v || '').trim())
-    .filter(Boolean)
-    .slice(0, max);
 }
 
 function normalizeScore(value) {
@@ -49,38 +57,59 @@ function normalizeScore(value) {
 function normalizeResult(parsed, profile, trip, rawText = '') {
   const score = normalizeScore(parsed?.score);
 
-  let title = String(parsed?.title || '').trim();
-  if (!title) {
-    title =
+  const title = safeString(
+    parsed?.title || (
       score >= 80 ? 'Gran compatibilidad' :
       score >= 65 ? 'Buena compatibilidad' :
       score >= 50 ? 'Compatibilidad moderada' :
-      'Compatibilidad básica';
-  }
+      'Compatibilidad básica'
+    ),
+    80
+  );
 
-  let summary = String(parsed?.summary || '').trim();
-  if (!summary) {
-    summary = `Compatibilidad estimada entre tu perfil y el viaje a ${trip?.dest || 'este destino'}.`;
-  }
+  const summary = safeString(
+    parsed?.summary || `Compatibilidad estimada entre tu perfil y el viaje a ${trip?.dest || 'este destino'}.`,
+    180
+  );
 
-  const pros = normalizeArray(parsed?.pros);
-  const cons = normalizeArray(parsed?.cons);
+  const pros = safeArray(parsed?.pros, 4, 120);
+  const cons = safeArray(parsed?.cons, 4, 120);
 
-  let advice = String(parsed?.advice || '').trim();
-  if (!advice) {
-    advice = rawText
-      ? rawText.slice(0, 280)
-      : 'Habla con el organizador y aclara presupuesto, ritmo y expectativas antes de unirte.';
-  }
+  const advice = safeString(
+    parsed?.advice || rawText || 'Hablad antes de confirmar para alinear expectativas, presupuesto y ritmo del viaje.',
+    220
+  );
 
   return { score, title, summary, pros, cons, advice };
 }
 
-function buildPrompt(profile, trip) {
-  return `
+function buildPayload(profile, trip) {
+  const normalizedProfile = {
+    full_name: safeString(profile?.full_name, 120),
+    bio: safeString(profile?.bio, 500),
+    style: safeString(profile?.style, 60),
+    interests: safeArray(profile?.interests, 8, 40),
+    languages: safeArray(profile?.languages, 6, 30),
+    home_city: safeString(profile?.home_city, 80),
+    age_range: safeString(profile?.age_range, 20),
+  };
+
+  const normalizedTrip = {
+    id: safeString(trip?.id, 80),
+    dest: safeString(trip?.dest, 120),
+    region: safeString(trip?.region, 80),
+    type: safeString(trip?.type, 40),
+    desc: safeString(trip?.desc, 600),
+    interests: safeArray(trip?.interests, 8, 40),
+    start_date: safeString(trip?.start_date, 20),
+    end_date: safeString(trip?.end_date, 20),
+    organizer_name: safeString(trip?.organizer_name, 120),
+  };
+
+  const prompt = `
 Eres un analista de compatibilidad para una app de compañeros de viaje.
 
-Tu tarea es evaluar la compatibilidad entre un usuario y un viaje.
+Evalúa la compatibilidad entre un usuario y un viaje.
 Responde SOLO con JSON válido.
 No añadas explicaciones fuera del JSON.
 No uses markdown.
@@ -98,7 +127,7 @@ Devuelve exactamente este esquema:
 
 Reglas:
 - score entre 35 y 98
-- title debe ser breve
+- title breve
 - summary máximo 180 caracteres
 - pros máximo 4 elementos
 - cons máximo 4 elementos
@@ -106,18 +135,24 @@ Reglas:
 - responde en español
 - sé útil, concreto y equilibrado
 - valora intereses, estilo, bio, idiomas y coherencia general con el viaje
-- si faltan datos, dilo de forma elegante en pros/cons/advice
+- si faltan datos, indícalo de forma elegante
 
 DATOS DEL USUARIO:
-${JSON.stringify(profile, null, 2)}
+${JSON.stringify(normalizedProfile, null, 2)}
 
 DATOS DEL VIAJE:
-${JSON.stringify(trip, null, 2)}
-`.trim();
+${JSON.stringify(normalizedTrip, null, 2)}
+`.trim().slice(0, MAX_TEXT_LENGTH);
+
+  return {
+    profile: normalizedProfile,
+    trip: normalizedTrip,
+    prompt,
+  };
 }
 
 export default async function handler(req) {
-  const cors = getCorsHeaders(req);
+  const cors = corsHeaders(req);
 
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: cors.headers });
@@ -143,62 +178,52 @@ export default async function handler(req) {
     return json(req, { error: 'Invalid JSON body' }, 400);
   }
 
-  const profile = body?.profile;
-  const trip = body?.trip;
-
-  if (!profile || !trip) {
+  if (!body?.profile || !body?.trip) {
     return json(req, { error: 'profile and trip are required' }, 400);
   }
 
-  const payload = {
-    contents: [
-      {
-        parts: [
-          {
-            text: buildPrompt(profile, trip),
-          },
-        ],
-      },
-    ],
-    generationConfig: {
-      temperature: 0.4,
-      maxOutputTokens: 700,
-      responseMimeType: 'text/plain',
-    },
-  };
+  const { profile, trip, prompt } = buildPayload(body.profile, body.trip);
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
+  const timeout = setTimeout(() => controller.abort(), 15000);
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+    const upstream = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: MAX_OUTPUT_TOKENS,
+            responseMimeType: 'text/plain',
+          },
+        }),
         signal: controller.signal,
       }
     );
 
     clearTimeout(timeout);
 
-    const data = await response.json().catch(() => null);
+    const data = await upstream.json().catch(() => null);
 
-    if (!response.ok) {
-      return json(req, {
-        error: 'Gemini request failed',
-        details: data?.error?.message || 'Unknown upstream error',
-      }, response.status);
+    if (!upstream.ok) {
+      return json(
+        req,
+        {
+          error: 'Gemini request failed',
+          details: data?.error?.message || 'Unknown upstream error',
+        },
+        upstream.status
+      );
     }
 
-    const rawText =
-      data?.candidates?.[0]?.content?.parts
-        ?.map(part => part?.text || '')
-        .join('')
-        .trim() || '';
+    const rawText = data?.candidates?.[0]?.content?.parts
+      ?.map(part => safeString(part?.text, 1000))
+      .join('')
+      .trim() || '';
 
     let parsed;
     try {
@@ -207,16 +232,12 @@ export default async function handler(req) {
       parsed = null;
     }
 
-    const result = normalizeResult(parsed, profile, trip, rawText);
-
-    return json(req, result, 200);
+    return json(req, normalizeResult(parsed, profile, trip, rawText), 200);
   } catch (err) {
     clearTimeout(timeout);
-
     if (err?.name === 'AbortError') {
       return json(req, { error: 'Upstream timeout' }, 504);
     }
-
     return json(req, { error: 'Internal server error' }, 500);
   }
 }
