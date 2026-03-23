@@ -1100,7 +1100,7 @@ async function checkAI(id) {
       </div>
       <div class="ai-pros-cons">
         <div class="ai-col"><div class="ai-col-title pro">✓ A favor</div><ul>${pros.map(p=>`<li>${p}</li>`).join('')}</ul></div>
-        <div class="ai-col"><div class="ai-col-title con">△ A tener en cuenta</div><ul>${cons.map(c=>`<li>${c}</li>`).join('')}</ul></div>
+        ${cons&&cons.length?`<div class="ai-col"><div class="ai-col-title con">△ A tener en cuenta</div><ul>${cons.map(c=>'<li>'+c+'</li>').join('')}</ul></div>`:''}
       </div>
       <div class="ai-consejo"><strong>💡 Consejo:</strong> ${consejo}</div>`;
   }, 800); // pequeño delay para que se vea el spinner
@@ -1185,6 +1185,7 @@ async function renderChatArea(id) {
 }
 
 function renderMsg(m) {
+  if (!m) return '';
   const mine = state.user && m.user_id === state.user.id;
   const name = m.user_name || '?';
   return `<div class="msg-row ${mine?'mine':'theirs'}">
@@ -1446,7 +1447,21 @@ function showToast(msg) { const t=document.getElementById('toast'); document.get
 function showLoading(msg) { document.getElementById('loadingMsg').textContent=msg||'Cargando...'; document.getElementById('loadingOverlay').classList.add('show'); }
 function hideLoading() { document.getElementById('loadingOverlay').classList.remove('show'); }
 
-init();
+// Global error handler to prevent UI freeze
+window.addEventListener('unhandledrejection', e => {
+  console.warn('Unhandled promise rejection:', e.reason);
+  e.preventDefault();
+});
+
+// Re-render on visibility change (fixes stale UI after tab switch)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && state.trips.length > 0) {
+    renderTrips();
+    renderStats();
+  }
+});
+
+try { init(); } catch(e) { console.error('Init error:', e); hideLoading(); }
 </script>
 </body>
 </html>
