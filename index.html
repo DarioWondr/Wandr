@@ -678,6 +678,15 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 3
   <p id="loadingMsg" style="font-family:'Playfair Display',serif;font-size:16px;color:var(--dusk)">Cargando...</p>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ╔══════════════════════════════════════════╗
+// ║  CONFIGURACIÓN — Pon tus claves aquí     ║
+// ║  Supabase Dashboard > Settings > API     ║
+// ╚══════════════════════════════════════════╝
+const SUPABASE_URL  = 'https://cwocdimaaxrhshloqrzq.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3b2NkaW1hYXhyaHNobG9xcnpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxODg5MjMsImV4cCI6MjA4OTc2NDkyM30.ADkyFHicjTKL2MbTdwtuusG79I44YwzpQfU5F2TVph4';
+</script>
 <script>
 // ═══════════════════════════════════════
 // SUPABASE CLIENT
@@ -1653,14 +1662,6 @@ if (document.readyState === 'loading') {
   try { init(); } catch(e) { console.error('Init error:', e); hideLoading(); }
 }
 </script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-// ╔══════════════════════════════════════════╗
-// ║  CONFIGURACIÓN — Pon tus claves aquí     ║
-// ║  Supabase Dashboard > Settings > API     ║
-// ╚══════════════════════════════════════════╝
-const SUPABASE_URL  = 'https://cwocdimaaxrhshloqrzq.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3b2NkaW1hYXhyaHNobG9xcnpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxODg5MjMsImV4cCI6MjA4OTc2NDkyM30.ADkyFHicjTKL2MbTdwtuusG79I44YwzpQfU5F2TVph4';
-</script>
 </body>
 </html>
+
