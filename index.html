@@ -1480,40 +1480,57 @@ window.addEventListener('unhandledrejection', e => {
   e.preventDefault();
 });
 
-// Session keepalive + re-render on visibility change
+// Session keepalive + WebSocket recovery on visibility change
 document.addEventListener('visibilitychange', async () => {
   if (!document.hidden) {
-    if (sb) {
-      // Refresh session silently — fixes buttons dying after idle
+    try {
+      if (!sb) return;
+      // Reinitializar cliente Supabase si el WebSocket murió
+      sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
       const { data } = await sb.auth.getSession();
-      if (data?.session && !state.user) {
+      if (data?.session) {
         state.user = data.session.user;
         await loadProfile(state.user.id);
         await loadTrips();
         updateNavAvatar();
-      } else if (!data?.session && state.user) {
+        renderTrips();
+        renderStats();
+        renderPopular();
+        // Reconectar chat si estaba activo
+        if (state.activeChatTripId) {
+          if (state.chatSubscription) {
+            try { sb.removeChannel(state.chatSubscription); } catch(e) {}
+            state.chatSubscription = null;
+          }
+          await renderChatArea(state.activeChatTripId);
+          state.chatSubscription = sb.channel(`chat-${state.activeChatTripId}`)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `trip_id=eq.${state.activeChatTripId}` }, payload => appendMessage(payload.new))
+            .subscribe();
+        }
+      } else if (state.user) {
         state.user = null;
         state.profile = null;
         state.myTripIds = [];
         state.joinedTripIds = [];
         updateNavAvatar();
+        renderTrips();
+        renderStats();
       }
-    }
-    if (state.trips.length > 0) {
-      renderTrips();
-      renderStats();
+    } catch(e) {
+      console.warn('Recovery error:', e);
     }
   }
 });
 
-// Periodic session refresh every 10 min to prevent token expiry
+// Refresh session token every 8 min
 setInterval(async () => {
   if (sb && state.user) {
-    await sb.auth.refreshSession();
+    try { await sb.auth.refreshSession(); } catch(e) {}
   }
-}, 10 * 60 * 1000);
+}, 8 * 60 * 1000);
 
 try { init(); } catch(e) { console.error('Init error:', e); hideLoading(); }
 </script>
 </body>
 </html>
+
