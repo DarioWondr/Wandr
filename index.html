@@ -887,11 +887,11 @@ function openDetail(id) {
     <div class="companion-item">
       <div class="avatar lg" style="background:${hc(t.name)}">${t.name[0]}</div>
       <div class="companion-info"><div class="companion-name">${t.name}</div><div class="companion-bio">Organizador · ${t.region}</div></div>
-      <button class="connect-btn" onclick="sendReq(this)">Contactar</button>
+
     </div>
     <div class="section-title">Compañeros (${t.companions.length})</div>
     ${!t.companions.length ? '<div style="color:var(--dusk);font-size:13px;padding:8px 0">Sé el primero en unirte.</div>' : ''}
-    ${t.companions.map(c=>`<div class="companion-item"><div class="avatar lg" style="background:${hc(c.name)}">${c.emoji||c.name[0]}</div><div class="companion-info"><div class="companion-name">${c.name}</div><div class="companion-bio">${c.bio}</div></div><button class="connect-btn" onclick="sendReq(this)">Conectar</button></div>`).join('')}
+    ${t.companions.map(c=>`<div class="companion-item"><div class="avatar lg" style="background:${hc(c.name)}">${c.emoji||c.name[0]}</div><div class="companion-info"><div class="companion-name">${c.name}</div><div class="companion-bio">${c.bio}</div></div></div>`).join('')}
     <div class="modal-actions">
       <button class="btn btn-cancel" onclick="closeModal('detailModal')">Cerrar</button>
       <button class="btn btn-primary ${joined?'joined':''}" onclick="closeModal('detailModal');joinTrip('${t.id}')">${joined?'✓ Ya eres parte':'✈ Unirme al viaje'}</button>
@@ -899,7 +899,7 @@ function openDetail(id) {
   openModal('detailModal');
 }
 
-function sendReq(btn) { btn.textContent='✓ Enviado'; btn.classList.add('sent'); showToast('💌 Solicitud enviada'); }
+
 
 // ═══════════════════════════════════════
 // AI COMPATIBILITY
@@ -1211,4 +1211,3 @@ init();
 </script>
 </body>
 </html>
-
