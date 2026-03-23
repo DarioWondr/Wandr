@@ -846,13 +846,13 @@ async function publishTrip() {
 
   if (sb) {
     console.log('Publicando viaje:', tripData);
-    const { data, error } = await sb.from('trips').insert(tripData).select('*, companions(id,user_id,name,bio)').single();
+    const { data: insertData, error } = await sb.from('trips').insert(tripData).select().single();
     if (error) {
       console.error('Error publicando:', error);
       showToast('⚠ ' + error.message);
       return;
     }
-    const normalized = normalizeTrip(data);
+    const normalized = normalizeTrip({ ...insertData, companions: [] });
     state.trips.unshift(normalized);
     state.myTripIds.push(normalized.id);
   } else {
