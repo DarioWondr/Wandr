@@ -1151,9 +1151,179 @@ async function checkAI(id) {
   document.getElementById('aiContent').innerHTML = `<div class="ai-loading"><div class="spinner"></div><p style="color:var(--dusk);font-size:13px;margin-top:8px">Analizando compatibilidad...</p></div>`;
   openModal('aiModal');
 
-  // Algoritmo de compatibilidad sin IA
-  const userInterests = new Set((profile.interests||[]).map(i=>i.toLowerCase().replace(/^[^\w]+/,'')));
-  const tripInterests = new Set((trip.interests||[]).map(i=>i.toLowerCase().replace(/^[^\w]+/,'')));
+  // ═══════════════════════════════════════
+// AI COMPATIBILITY (REAL GEMINI)
+// ═══════════════════════════════════════
+
+function getAIColor(score) {
+  if (score >= 80) return '#4A5E40';
+  if (score >= 60) return '#C4622D';
+  return '#c0392b';
+}
+
+function renderAIResult(result) {
+  const score = Number(result?.score || 65);
+  const title = san(result?.title || 'Compatibilidad moderada');
+  const summary = san(result?.summary || 'Compatibilidad calculada para este viaje.');
+  const pros = Array.isArray(result?.pros) ? result.pros : [];
+  const cons = Array.isArray(result?.cons) ? result.cons : [];
+  const advice = san(result?.advice || 'Hablad antes de confirmar para alinear expectativas.');
+
+  const color = getAIColor(score);
+
+  document.getElementById('aiContent').innerHTML = `
+    <div style="text-align:center;margin-bottom:20px">
+      <div class="ai-score-circle" style="background:${color}">${score}%</div>
+      <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:6px">${title}</div>
+      <div style="font-size:13px;color:var(--dusk)">${summary}</div>
+    </div>
+
+    <div class="ai-pros-cons">
+      <div class="ai-col">
+        <div class="ai-col-title pro">Puntos a favor</div>
+        <ul>
+          ${pros.length ? pros.map(p => `<li>${san(p)}</li>`).join('') : '<li>No hay ventajas claras destacadas.</li>'}
+        </ul>
+      </div>
+      <div class="ai-col">
+        <div class="ai-col-title con">Puntos a vigilar</div>
+        <ul>
+          ${cons.length ? cons.map(c => `<li>${san(c)}</li>`).join('') : '<li>No hay riesgos importantes destacados.</li>'}
+        </ul>
+      </div>
+    </div>
+
+    <div class="ai-consejo">
+      <strong>Consejo:</strong> ${advice}
+    </div>
+  `;
+}
+
+function renderLocalAIFallback(profile, trip, reason = '') {
+  const userInterests = new Set((profile.interests || []).map(i => String(i).toLowerCase().replace(/^[^\w]+/, '')));
+  const tripInterests = new Set((trip.interests || []).map(i => String(i).toLowerCase().replace(/^[^\w]+/, '')));
+
+  const common = [...userInterests].filter(i => tripInterests.has(i));
+  const interestScore = tripInterests.size > 0
+    ? Math.round((common.length / Math.max(userInterests.size || 1, tripInterests.size || 1)) * 40)
+    : 20;
+
+  const styleMap = {
+    'Aventurero': ['Aventura'],
+    'Mochilero': ['Aventura', 'Cultural', 'Gastro'],
+    'Cultural': ['Cultural', 'Gastro'],
+    'Confort': ['Playa', 'Gastro', 'Cultural']
+  };
+
+  const styleMatch = (styleMap[profile.style || 'Mochilero'] || []).includes(trip.type);
+  const styleScore = styleMatch ? 25 : 10;
+  const bioScore = profile.bio ? 15 : 5;
+
+  const base = 30 + interestScore + styleScore + bioScore;
+  const score = Math.min(98, Math.max(45, base));
+
+  const pros = [];
+  const cons = [];
+
+  if (common.length > 0) pros.push(`Comparten ${common.length} interés${common.length > 1 ? 'es' : ''}: ${common.slice(0, 2).join(', ')}`);
+  if (styleMatch) pros.push(`Tu estilo "${profile.style}" encaja con viajes de tipo ${trip.type}`);
+  if (profile.bio) pros.push('Tienes perfil completo, generarás más confianza');
+
+  if (common.length === 0) cons.push('No coincidís en intereses declarados — hablad antes de uniros');
+  if (!styleMatch) cons.push(`Tu estilo "${profile.style || 'Mochilero'}" puede diferir del enfoque del viaje`);
+  if (!profile.bio) cons.push('Completa tu bio para que el organizador te conozca mejor');
+
+  const title =
+    score >= 80 ? 'Gran compatibilidad' :
+    score >= 65 ? 'Buena compatibilidad' :
+    score >= 50 ? 'Compatibilidad moderada' :
+    'Compatibilidad básica';
+
+  const summary = common.length > 0
+    ? `Coincidís en ${common.slice(0, 2).join(' y ')}. Vale la pena contactar al organizador.`
+    : `Distinto perfil pero complementario. El diálogo previo es clave.`;
+
+  const advice = reason
+    ? `No se pudo consultar Gemini. Resultado local de respaldo. ${reason}`
+    : 'Resultado local de respaldo. Hablad antes de confirmar para alinear expectativas.';
+
+  renderAIResult({
+    score,
+    title,
+    summary,
+    pros: pros.length ? pros : ['Toda aventura compartida es una oportunidad de crecer'],
+    cons,
+    advice
+  });
+}
+
+async function checkAI(id) {
+  if (!state.user) {
+    requireAuth(() => checkAI(id));
+    return;
+  }
+
+  const profile = state.profile;
+  if (!profile) {
+    showToast('⚠ Completa tu perfil primero');
+    openModal('onboardingModal');
+    return;
+  }
+
+  const trip = state.trips.find(t => t.id === id);
+  if (!trip) return;
+
+  document.getElementById('aiContent').innerHTML = `
+    <div class="ai-loading">
+      <div class="spinner"></div>
+      <p style="color:var(--dusk);font-size:13px;margin-top:8px">
+        Analizando compatibilidad con IA...
+      </p>
+    </div>
+  `;
+  openModal('aiModal');
+
+  try {
+    const res = await fetch('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile: {
+          full_name: profile.full_name || profile.name || '',
+          bio: profile.bio || '',
+          style: profile.style || '',
+          interests: profile.interests || [],
+          languages: profile.languages || [],
+          home_city: profile.home_city || '',
+          age_range: profile.age_range || ''
+        },
+        trip: {
+          id: trip.id,
+          dest: trip.dest || '',
+          region: trip.region || '',
+          type: trip.type || '',
+          desc: trip.desc || '',
+          interests: trip.interests || [],
+          start_date: trip.start || trip.start_date || '',
+          end_date: trip.end || trip.end_date || '',
+          organizer_name: trip.name || ''
+        }
+      })
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok || !data) {
+      throw new Error(data?.details || data?.error || 'No se pudo obtener respuesta de IA');
+    }
+
+    renderAIResult(data);
+  } catch (err) {
+    console.error('AI error:', err);
+    renderLocalAIFallback(profile, trip, err?.message || '');
+    showToast('⚠ Gemini no respondió. Mostrando análisis local.');
+  }
+}
   
   // Intereses en común
   const common = [...userInterests].filter(i => tripInterests.has(i));
