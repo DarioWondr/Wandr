@@ -451,6 +451,36 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 3
   <div class="modal wide" id="detailContent"></div>
 </div>
 
+<!-- ══ MODAL: EDIT TRIP ══ -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal wide">
+    <button class="close-btn" onclick="closeModal('editModal')">×</button>
+    <h2>Editar viaje</h2>
+    <p class="modal-sub">Actualiza los detalles de tu viaje</p>
+    <div class="form-row">
+      <div class="form-group"><label>Destino</label><input id="edit-dest" placeholder="Ej: Tokio, Japón" /></div>
+      <div class="form-group"><label>Región</label>
+        <select id="edit-region"><option>Europa</option><option>Asia</option><option>América</option><option>África</option><option>Oceanía</option></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Fecha inicio</label><input type="date" id="edit-start" /></div>
+      <div class="form-group"><label>Fecha fin</label><input type="date" id="edit-end" /></div>
+    </div>
+    <div class="form-group"><label>Descripción</label><textarea id="edit-desc" placeholder="¿Qué planes tienes?"></textarea></div>
+    <div class="form-row">
+      <div class="form-group"><label>Tipo de viaje</label>
+        <select id="edit-type"><option>Aventura</option><option>Cultural</option><option>Playa</option><option>Gastro</option></select>
+      </div>
+      <div class="form-group"><label>Email de contacto</label><input id="edit-email" type="email" /></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('editModal')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEditTrip()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MODAL: AI MATCH ══ -->
 <div class="modal-overlay" id="aiModal">
   <div class="modal">
@@ -1103,6 +1133,62 @@ async function sendMsg(id) {
 }
 
 // ═══════════════════════════════════════
+// EDIT TRIP
+// ═══════════════════════════════════════
+let editingTripId = null;
+
+function openEditTrip(id) {
+  const t = state.trips.find(x => x.id === id);
+  if (!t) return;
+  editingTripId = id;
+  document.getElementById('edit-dest').value  = t.dest || '';
+  document.getElementById('edit-region').value = t.region || 'Europa';
+  document.getElementById('edit-start').value = t.start || '';
+  document.getElementById('edit-end').value   = t.end   || '';
+  document.getElementById('edit-desc').value  = t.desc  || '';
+  document.getElementById('edit-type').value  = t.type  || 'Cultural';
+  document.getElementById('edit-email').value = t.email || '';
+  openModal('editModal');
+}
+
+async function saveEditTrip() {
+  if (!editingTripId) return;
+  const updates = {
+    dest:            document.getElementById('edit-dest').value.trim(),
+    region:          document.getElementById('edit-region').value,
+    start_date:      document.getElementById('edit-start').value || null,
+    end_date:        document.getElementById('edit-end').value   || null,
+    description:     document.getElementById('edit-desc').value.trim(),
+    type:            document.getElementById('edit-type').value,
+    organizer_email: document.getElementById('edit-email').value.trim(),
+    emoji:           REGION_EMOJI[document.getElementById('edit-region').value] || '✈',
+  };
+  if (!updates.dest) { showToast('⚠ El destino no puede estar vacío'); return; }
+
+  if (sb) {
+    const { error } = await sb.from('trips').update(updates).eq('id', editingTripId);
+    if (error) { showToast('⚠ Error: ' + error.message); return; }
+  }
+
+  const trip = state.trips.find(t => t.id === editingTripId);
+  if (trip) {
+    trip.dest  = updates.dest;
+    trip.region = updates.region;
+    trip.start = updates.start_date;
+    trip.end   = updates.end_date;
+    trip.desc  = updates.description;
+    trip.type  = updates.type;
+    trip.email = updates.organizer_email;
+    trip.emoji = updates.emoji;
+  }
+
+  closeModal('editModal');
+  renderMisViajes();
+  renderTrips();
+  showToast('✅ Viaje actualizado');
+}
+
+// ═══════════════════════════════════════
 // DELETE / LEAVE TRIP
 // ═══════════════════════════════════════
 async function deleteTrip(id) {
@@ -1167,6 +1253,7 @@ function renderMisViajes() {
       </div>
       <div style="margin-top:10px;font-size:12px;color:var(--dusk)">${t.companions.length} compañero${t.companions.length!==1?'s':''} · <span style="cursor:pointer;color:var(--sky)" onclick="event.stopPropagation();openChatForTrip('${t.id}')">💬 Chat</span></div>
       <div style="margin-top:12px;display:flex;gap:8px">
+        ${isOrg ? `<button class="action-btn" style="background:#d0e8f0;color:var(--sky);font-size:11px" onclick="event.stopPropagation();openEditTrip('${t.id}')">✏️ Editar</button>` : ''}
         ${isOrg ? `<button class="action-btn" style="background:#fde8d0;color:#C4622D;font-size:11px" onclick="event.stopPropagation();deleteTrip('${t.id}')">🗑 Borrar viaje</button>` : ''}
         ${isJoined && !isOrg ? `<button class="action-btn" style="background:var(--smoke);color:var(--dusk);font-size:11px" onclick="event.stopPropagation();leaveTrip('${t.id}')">↩ Salirme</button>` : ''}
       </div>
