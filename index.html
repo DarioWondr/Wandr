@@ -451,6 +451,50 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 3
   <div class="modal wide" id="detailContent"></div>
 </div>
 
+<!-- ══ MODAL: PROFILE ══ -->
+<div class="modal-overlay" id="profileModal">
+  <div class="modal">
+    <button class="close-btn" onclick="closeModal('profileModal')">×</button>
+    <h2>Mi perfil</h2>
+    <p class="modal-sub" id="profile-email-label"></p>
+    <div class="form-row">
+      <div class="form-group"><label>Nombre</label><input id="profile-name" placeholder="Tu nombre" /></div>
+      <div class="form-group"><label>Edad</label><input id="profile-age" type="number" placeholder="28" min="18" max="99" /></div>
+    </div>
+    <div class="form-group"><label>Sobre ti</label><textarea id="profile-bio" placeholder="Cuéntanos sobre ti..."></textarea></div>
+    <div class="form-group">
+      <label>Estilo de viaje</label>
+      <div class="style-options" id="profile-style-options">
+        <div class="style-opt" onclick="selectProfileStyle(this,'Mochilero')"><div class="icon">🎒</div><div class="label">Mochilero</div><div class="desc">Económico, flexible</div></div>
+        <div class="style-opt" onclick="selectProfileStyle(this,'Confort')"><div class="icon">🏨</div><div class="label">Confort</div><div class="desc">Hoteles, planificado</div></div>
+        <div class="style-opt" onclick="selectProfileStyle(this,'Aventurero')"><div class="icon">🏔</div><div class="label">Aventurero</div><div class="desc">Activo, naturaleza</div></div>
+        <div class="style-opt" onclick="selectProfileStyle(this,'Cultural')"><div class="icon">🏛</div><div class="label">Cultural</div><div class="desc">Historia, arte, gastro</div></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Intereses</label>
+      <div class="filter-pills" id="profile-interests">
+        <button class="pill" onclick="togglePill(this)">📸 Fotografía</button>
+        <button class="pill" onclick="togglePill(this)">🍜 Gastronomía</button>
+        <button class="pill" onclick="togglePill(this)">🏔 Senderismo</button>
+        <button class="pill" onclick="togglePill(this)">🏛 Historia</button>
+        <button class="pill" onclick="togglePill(this)">🎒 Mochilero</button>
+        <button class="pill" onclick="togglePill(this)">🧘 Bienestar</button>
+        <button class="pill" onclick="togglePill(this)">🎶 Música</button>
+        <button class="pill" onclick="togglePill(this)">🚴 Ciclismo</button>
+        <button class="pill" onclick="togglePill(this)">🤿 Buceo</button>
+        <button class="pill" onclick="togglePill(this)">🎨 Arte</button>
+        <button class="pill" onclick="togglePill(this)">🌿 Naturaleza</button>
+        <button class="pill" onclick="togglePill(this)">🛍 Shopping</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" style="flex:0.6" onclick="doLogout()">Cerrar sesión</button>
+      <button class="btn btn-primary" onclick="saveProfileEdit()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MODAL: EDIT TRIP ══ -->
 <div class="modal-overlay" id="editModal">
   <div class="modal wide">
@@ -590,7 +634,7 @@ function requireAuth(callback) {
 
 function onAvatarClick() {
   if (state.user) {
-    if (confirm(`Sesión activa: ${state.user.email}\n\n¿Cerrar sesión?`)) doLogout();
+    openModal('profileModal');
   } else {
     openModal('authModal');
   }
@@ -1133,6 +1177,63 @@ async function sendMsg(id) {
 }
 
 // ═══════════════════════════════════════
+// PROFILE EDIT
+// ═══════════════════════════════════════
+let profileEditStyle = '';
+
+const _origOpenModal = openModal;
+function openModal(id) {
+  if (id === 'profileModal' && state.profile) {
+    const p = state.profile;
+    document.getElementById('profile-email-label').textContent = state.user?.email || '';
+    document.getElementById('profile-name').value = p.name || '';
+    document.getElementById('profile-age').value  = p.age  || '';
+    document.getElementById('profile-bio').value  = p.bio  || '';
+    profileEditStyle = p.style || '';
+    // Set style
+    document.querySelectorAll('#profile-style-options .style-opt').forEach(el => {
+      el.classList.toggle('active', el.querySelector('.label').textContent === profileEditStyle);
+    });
+    // Set interests
+    const userInterests = (p.interests || []).map(i => i.trim());
+    document.querySelectorAll('#profile-interests .pill').forEach(pill => {
+      pill.classList.toggle('active', userInterests.some(i => pill.textContent.trim().includes(i) || i.includes(pill.textContent.trim().replace(/^[^\w]+/,''))));
+    });
+  }
+  document.getElementById(id).classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function selectProfileStyle(el, val) {
+  document.querySelectorAll('#profile-style-options .style-opt').forEach(o => o.classList.remove('active'));
+  el.classList.add('active');
+  profileEditStyle = val;
+}
+
+async function saveProfileEdit() {
+  if (!sb || !state.user) return;
+  const name = document.getElementById('profile-name').value.trim();
+  if (!name) { showToast('⚠ El nombre no puede estar vacío'); return; }
+  const interests = [...document.querySelectorAll('#profile-interests .pill.active')].map(p => p.textContent.trim());
+  const updates = {
+    id: state.user.id,
+    name,
+    full_name: name,
+    age:  parseInt(document.getElementById('profile-age').value) || null,
+    bio:  document.getElementById('profile-bio').value.trim(),
+    style: profileEditStyle || 'Mochilero',
+    interests,
+    updated_at: new Date().toISOString()
+  };
+  const { error } = await sb.from('profiles').upsert(updates, { onConflict: 'id' });
+  if (error) { showToast('⚠ Error: ' + error.message); return; }
+  state.profile = { ...state.profile, ...updates };
+  updateNavAvatar();
+  closeModal('profileModal');
+  showToast('✅ Perfil actualizado');
+}
+
+// ═══════════════════════════════════════
 // EDIT TRIP
 // ═══════════════════════════════════════
 let editingTripId = null;
@@ -1277,7 +1378,6 @@ function switchView(v) {
 // ═══════════════════════════════════════
 // MODALS
 // ═══════════════════════════════════════
-function openModal(id) { document.getElementById(id).classList.add('open'); document.body.style.overflow='hidden'; }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); document.body.style.overflow=''; }
 document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if(e.target===m) closeModal(m.id); }));
 
