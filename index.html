@@ -1385,7 +1385,6 @@ async function sendMsg(id) {
 // ═══════════════════════════════════════
 let profileEditStyle = '';
 
-const _origOpenModal = openModal;
 function openModal(id) {
   if (id === 'profileModal' && state.profile) {
     const p = state.profile;
@@ -1394,18 +1393,16 @@ function openModal(id) {
     document.getElementById('profile-age').value  = p.age  || '';
     document.getElementById('profile-bio').value  = p.bio  || '';
     profileEditStyle = p.style || '';
-    // Set style
     document.querySelectorAll('#profile-style-options .style-opt').forEach(el => {
       el.classList.toggle('active', el.querySelector('.label').textContent === profileEditStyle);
     });
-    // Set interests
     const userInterests = (p.interests || []).map(i => i.trim());
     document.querySelectorAll('#profile-interests .pill').forEach(pill => {
       pill.classList.toggle('active', userInterests.some(i => pill.textContent.trim().includes(i) || i.includes(pill.textContent.trim().replace(/^[^\w]+/,''))));
     });
   }
-  document.getElementById(id).classList.add('open');
-  document.body.style.overflow = 'hidden';
+  const el = document.getElementById(id);
+  if (el) { el.classList.add('open'); document.body.style.overflow = 'hidden'; }
 }
 
 function selectProfileStyle(el, val) {
