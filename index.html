@@ -36,7 +36,7 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 3
 .btn-sm{padding:7px 14px;font-size:12px}
 .profile-avatar{width:34px;height:34px;border-radius:50%;background:var(--terra);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;cursor:pointer;border:2px solid rgba(245,237,216,0.3);flex-shrink:0}
 
-.view{display:none}.view.active{display:block;background:var(--cream);min-height:calc(100vh - 72px)}
+.view{display:none}.view.active{display:block;background:var(--cream)}
 
 .hero{position:relative;padding:60px 32px 50px;background:var(--bark);overflow:hidden;text-align:center;width:100%}
 .hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 120%,rgba(196,98,45,0.35) 0%,transparent 70%);pointer-events:none}
@@ -310,7 +310,7 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 3
 </nav>
 
 <!-- ══ VIEW: EXPLORAR ══ -->
-<div class="view active" id="view-explorar" style="background:var(--cream)">
+<div class="view active" id="view-explorar">
   <section class="hero">
     <div class="hero-tag">✈ Viajeros del mundo</div>
     <h1>Encuentra tu <em>compañero</em> de aventura</h1>
@@ -689,7 +689,7 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 3
   <p id="loadingMsg" style="font-family:'Playfair Display',serif;font-size:16px;color:var(--dusk)">Cargando...</p>
 </div>
 
-<script>
+<script defer>
 // ═══════════════════════════════════════
 // SUPABASE CLIENT
 // ═══════════════════════════════════════
