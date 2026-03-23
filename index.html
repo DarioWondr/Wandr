@@ -196,7 +196,6 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 3
 .loading-overlay.show{opacity:1;pointer-events:all}
 .loading-overlay .spinner{width:36px;height:36px;border:3px solid var(--smoke);border-top-color:var(--terra);border-radius:50%;animation:spin 0.8s linear infinite}
 
-
 @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -233,8 +232,6 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 3
     <div class="profile-avatar" id="navAvatar" onclick="onAvatarClick()">?</div>
   </div>
 </nav>
-
-
 
 <!-- ══ VIEW: EXPLORAR ══ -->
 <div class="view active" id="view-explorar">
@@ -880,34 +877,50 @@ function renderTrips() {
     grid.innerHTML = `<div class="empty-state"><div class="es-icon">🔍</div><div class="es-title">Sin resultados</div><div class="es-desc">Prueba con otro destino o cambia los filtros</div></div>`;
     return;
   }
-  grid.innerHTML = list.map((t,i) => {
+  const cards = list.map((t,i) => {
     const joined = state.joinedTripIds.includes(t.id);
-    return `<div class="trip-card" style="animation-delay:${i*0.07}s">
+    const isMember = joined || state.myTripIds.includes(t.id);
+    const div = document.createElement('div');
+    div.className = 'trip-card';
+    div.style.animationDelay = `${i*0.07}s`;
+    div.innerHTML = `
       <div class="trip-img" style="background:${REGION_COLOR[t.region]||'#f0ebe1'}">
         <div>${t.emoji}</div>
-        <div class="trip-badge">${t.type}</div>
+        <div class="trip-badge">${san(t.type)}</div>
       </div>
       <div class="trip-body">
-        <div class="trip-dest" onclick="openDetail('${san(t.id)}')">${san(t.dest)}</div>
+        <div class="trip-dest">${san(t.dest)}</div>
         <div class="trip-dates">📅 ${fmt(t.start)} → ${fmt(t.end)}</div>
         <div class="trip-desc">${san(t.desc)}</div>
         <div class="trip-footer">
           <div class="traveler-info">
-            <div class="avatar" style="background:${hc(t.name)}">${t.name[0]}</div>
+            <div class="avatar" style="background:${hc(t.name)}">${(t.name||'?')[0]}</div>
             <div>
               <div class="traveler-name">${san(t.name)}</div>
               <div class="traveler-meta">${t.companions.length} compañero${t.companions.length!==1?'s':''}</div>
             </div>
           </div>
           <div class="trip-actions">
-            ${(state.joinedTripIds.includes(t.id)||state.myTripIds.includes(t.id)) ? `<button class="action-btn btn-chat" onclick="openChatForTrip('${t.id}')" title="Chat">💬</button>` : ''}
-            <button class="action-btn btn-ai"   onclick="checkAI('${t.id}')">🤖 Match</button>
-            <button class="action-btn btn-join ${joined?'joined':''}" onclick="joinTrip('${t.id}')">${joined?'✓ Unido':'Unirse'}</button>
+            ${isMember ? '<button class="action-btn btn-chat" data-action="chat" title="Chat">💬</button>' : ''}
+            <button class="action-btn btn-ai" data-action="ai">🤖 Match</button>
+            <button class="action-btn btn-join ${joined?'joined':''}" data-action="join">${joined?'✓ Unido':'Unirse'}</button>
           </div>
         </div>
-      </div>
-    </div>`;
-  }).join('');
+      </div>`;
+    div.querySelector('.trip-dest').addEventListener('click', () => openDetail(t.id));
+    div.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const action = btn.dataset.action;
+        if (action === 'chat') openChatForTrip(t.id);
+        else if (action === 'ai') checkAI(t.id);
+        else if (action === 'join') joinTrip(t.id);
+      });
+    });
+    return div;
+  });
+  grid.innerHTML = '';
+  cards.forEach(c => grid.appendChild(c));
 }
 
 function renderStats() {
@@ -991,10 +1004,8 @@ async function publishTrip() {
   };
 
   if (sb) {
-    console.log('Publicando viaje:', tripData);
     const { data: insertData, error } = await sb.from('trips').insert(tripData).select().single();
     if (error) {
-      console.error('Error publicando:', error);
       showToast('⚠ ' + error.message);
       return;
     }
@@ -1018,8 +1029,9 @@ function openDetail(id) {
   const t = state.trips.find(x => x.id === id);
   if (!t) return;
   const joined = state.joinedTripIds.includes(t.id);
-  document.getElementById('detailContent').innerHTML = `
-    <button class="close-btn" onclick="closeModal('detailModal')">×</button>
+  const detailEl = document.getElementById('detailContent');
+  detailEl.innerHTML = `
+    <button class="close-btn" id="detailCloseBtn">×</button>
     <div style="font-size:52px;margin-bottom:10px">${t.emoji}</div>
     <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;margin-bottom:16px">
       <div>
@@ -1027,15 +1039,15 @@ function openDetail(id) {
         <div style="color:var(--dusk);font-size:13px;margin-top:4px">📅 ${fmt(t.start)} → ${fmt(t.end)} · ${san(t.type)}</div>
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;margin-top:4px">
-        <button class="action-btn btn-ai" onclick="checkAI('${t.id}')">🤖 Match IA</button>
-        ${(state.joinedTripIds.includes(t.id)||state.myTripIds.includes(t.id)) ? `<button class="action-btn btn-chat" onclick="closeModal('detailModal');openChatForTrip('${t.id}')">💬 Chat</button>` : ''}
+        <button class="action-btn btn-ai" data-action="ai">🤖 Match IA</button>
+        ${(state.joinedTripIds.includes(t.id)||state.myTripIds.includes(t.id)) ? '<button class="action-btn btn-chat" data-action="chat">💬 Chat</button>' : ''}
       </div>
     </div>
     <p style="font-size:14px;line-height:1.7;color:#5a4a38;margin-bottom:12px">${san(t.desc)}</p>
     <div>${(t.interests||[]).map(i=>`<span class="tag">${san(i)}</span>`).join('')}</div>
     <div class="section-title">Organizador</div>
     <div class="companion-item">
-      <div class="avatar lg" style="background:${hc(t.name)}">${t.name[0]}</div>
+      <div class="avatar lg" style="background:${hc(t.name)}">${(t.name||"?")[0]}</div>
       <div class="companion-info"><div class="companion-name">${san(t.name)}</div><div class="companion-bio">Organizador · ${san(t.region)}</div></div>
 
     </div>
@@ -1044,12 +1056,15 @@ function openDetail(id) {
     ${t.companions.map(c=>`<div class="companion-item"><div class="avatar lg" style="background:${hc(c.name)}">${c.emoji||c.name[0]}</div><div class="companion-info"><div class="companion-name">${san(c.name)}</div><div class="companion-bio">${san(c.bio)}</div></div></div>`).join('')}
     <div class="modal-actions">
       <button class="btn btn-cancel" onclick="closeModal('detailModal')">Cerrar</button>
-      <button class="btn btn-primary ${joined?'joined':''}" onclick="closeModal('detailModal');joinTrip('${t.id}')">${joined?'✓ Ya eres parte':'✈ Unirme al viaje'}</button>
+      <button class="btn btn-primary ${joined?'joined':''}" id="detailJoinBtn">${joined?'✓ Ya eres parte':'✈ Unirme al viaje'}</button>
     </div>`;
+  document.getElementById('detailCloseBtn').addEventListener('click', () => closeModal('detailModal'));
+  const joinBtnEl = document.getElementById('detailJoinBtn');
+  if (joinBtnEl) joinBtnEl.addEventListener('click', () => { closeModal('detailModal'); joinTrip(t.id); });
+  detailEl.querySelectorAll('[data-action="ai"]').forEach(b => b.addEventListener('click', () => checkAI(t.id)));
+  detailEl.querySelectorAll('[data-action="chat"]').forEach(b => b.addEventListener('click', () => { closeModal('detailModal'); openChatForTrip(t.id); }));
   openModal('detailModal');
 }
-
-
 
 // ═══════════════════════════════════════
 // AI COMPATIBILITY
@@ -1148,17 +1163,21 @@ function renderChatList() {
     el.innerHTML = `<div style="padding:24px;text-align:center;color:var(--dusk);font-size:13px">Únete a un viaje para chatear</div>`;
     return;
   }
-  el.innerHTML = allIds.map(id => {
+  el.innerHTML = '';
+  allIds.forEach(id => {
     const t = state.trips.find(x => x.id === id);
-    if (!t) return '';
-    return `<div class="chat-list-item ${state.activeChatTripId===id?'active':''}" onclick="selectChat('${id}')">
+    if (!t) return;
+    const item = document.createElement('div');
+    item.className = `chat-list-item${state.activeChatTripId===id?' active':''}`;
+    item.innerHTML = `
       <div style="font-size:24px;flex-shrink:0">${t.emoji}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.dest}</div>
+        <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${san(t.dest)}</div>
         <div style="font-size:11px;color:var(--dusk)">${fmt(t.start)} → ${fmt(t.end)}</div>
-      </div>
-    </div>`;
-  }).join('');
+      </div>`;
+    item.addEventListener('click', () => selectChat(id));
+    el.appendChild(item);
+  });
 }
 
 async function selectChat(id) {
@@ -1196,7 +1215,7 @@ async function renderChatArea(id) {
     <div class="chat-area-header">
       <span style="font-size:28px">${trip.emoji}</span>
       <div>
-        <div class="chat-area-title">${trip.dest}</div>
+        <div class="chat-area-title">${san(trip.dest)}</div>
         <div class="chat-area-sub">${fmt(trip.start)} → ${fmt(trip.end)} · ${trip.companions.length+1} viajero${trip.companions.length?'s':''}</div>
       </div>
     </div>
@@ -1204,10 +1223,17 @@ async function renderChatArea(id) {
       ${messages.length ? messages.map(m=>renderMsg(m)).join('') : '<div style="text-align:center;color:var(--dusk);font-size:13px;padding:24px 0">¡Sé el primero en escribir!</div>'}
     </div>
     <div class="chat-input-area">
-      <textarea class="chat-input" id="chatInput" placeholder="Escribe un mensaje..." rows="1" onkeydown="chatKey(event,'${id}')"></textarea>
-      <button class="send-btn" onclick="sendMsg('${id}')">➤</button>
+      <textarea class="chat-input" id="chatInput" placeholder="Escribe un mensaje..." rows="1"></textarea>
+      <button class="send-btn">➤</button>
     </div>`;
   scrollChat();
+  // Attach events after render
+  const inp = document.getElementById('chatInput');
+  if (inp) {
+    inp.addEventListener('keydown', e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg(id);} });
+  }
+  const sendBtnEl = chatArea.querySelector('.send-btn');
+  if (sendBtnEl) sendBtnEl.addEventListener('click', () => sendMsg(id));
 }
 
 function renderMsg(m) {
@@ -1419,26 +1445,44 @@ function renderMisViajes() {
     return;
   }
   document.getElementById('misViajesSubtitle').textContent = `Tienes ${myTrips.length} viaje${myTrips.length!==1?'s':''} activo${myTrips.length!==1?'s':''}`;
-  content.innerHTML = `<div class="trips-grid-2">${myTrips.map(t=>{
+  const grid = document.createElement('div');
+  grid.className = 'trips-grid-2';
+  myTrips.forEach(t => {
     const isOrg = state.myTripIds.includes(t.id);
     const isJoined = state.joinedTripIds.includes(t.id);
-    return `<div class="my-trip-card" onclick="openDetail('${t.id}')">
+    const card = document.createElement('div');
+    card.className = 'my-trip-card';
+    card.innerHTML = `
       <div style="font-size:36px;margin-bottom:10px">${t.emoji}</div>
       <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px">${san(t.dest)}</div>
       <div style="font-size:12px;color:var(--dusk);margin-bottom:10px">📅 ${fmt(t.start)} → ${fmt(t.end)}</div>
       <div>
-        <span class="chip">${t.type}</span>
+        <span class="chip">${san(t.type)}</span>
         ${isOrg ? '<span class="chip green">Organizador</span>' : ''}
         ${isJoined && !isOrg ? '<span class="chip blue">Unido</span>' : ''}
       </div>
-      <div style="margin-top:10px;font-size:12px;color:var(--dusk)">${t.companions.length} compañero${t.companions.length!==1?'s':''} · <span style="cursor:pointer;color:var(--sky)" onclick="event.stopPropagation();openChatForTrip('${t.id}')">💬 Chat</span></div>
-      <div style="margin-top:12px;display:flex;gap:8px">
-        ${isOrg ? `<button class="action-btn" style="background:#d0e8f0;color:var(--sky);font-size:11px" onclick="event.stopPropagation();openEditTrip('${t.id}')">✏️ Editar</button>` : ''}
-        ${isOrg ? `<button class="action-btn" style="background:#fde8d0;color:#C4622D;font-size:11px" onclick="event.stopPropagation();deleteTrip('${t.id}')">🗑 Borrar viaje</button>` : ''}
-        ${isJoined && !isOrg ? `<button class="action-btn" style="background:var(--smoke);color:var(--dusk);font-size:11px" onclick="event.stopPropagation();leaveTrip('${t.id}')">↩ Salirme</button>` : ''}
+      <div style="margin-top:10px;font-size:12px;color:var(--dusk)">
+        ${t.companions.length} compañero${t.companions.length!==1?'s':''}
+        ${isOrg || isJoined ? '<span class="chat-link" style="cursor:pointer;color:var(--sky)"> · 💬 Chat</span>' : ''}
       </div>
-    </div>`;
-  }).join('')}</div>`;
+      <div style="margin-top:12px;display:flex;gap:8px">
+        ${isOrg ? '<button class="action-btn edit-btn" style="background:#d0e8f0;color:var(--sky);font-size:11px">✏️ Editar</button>' : ''}
+        ${isOrg ? '<button class="action-btn delete-btn" style="background:#fde8d0;color:#C4622D;font-size:11px">🗑 Borrar viaje</button>' : ''}
+        ${isJoined && !isOrg ? '<button class="action-btn leave-btn" style="background:var(--smoke);color:var(--dusk);font-size:11px">↩ Salirme</button>' : ''}
+      </div>`;
+    card.addEventListener('click', () => openDetail(t.id));
+    const chatLink = card.querySelector('.chat-link');
+    if (chatLink) chatLink.addEventListener('click', e => { e.stopPropagation(); openChatForTrip(t.id); });
+    const editBtn = card.querySelector('.edit-btn');
+    if (editBtn) editBtn.addEventListener('click', e => { e.stopPropagation(); openEditTrip(t.id); });
+    const deleteBtn = card.querySelector('.delete-btn');
+    if (deleteBtn) deleteBtn.addEventListener('click', e => { e.stopPropagation(); deleteTrip(t.id); });
+    const leaveBtn = card.querySelector('.leave-btn');
+    if (leaveBtn) leaveBtn.addEventListener('click', e => { e.stopPropagation(); leaveTrip(t.id); });
+    grid.appendChild(card);
+  });
+  content.innerHTML = '';
+  content.appendChild(grid);
 }
 
 // ═══════════════════════════════════════
