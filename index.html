@@ -195,8 +195,7 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 3
 .loading-overlay{position:fixed;inset:0;background:rgba(251,247,239,0.92);backdrop-filter:blur(3px);z-index:500;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;opacity:0;pointer-events:none;transition:opacity 0.2s}
 .loading-overlay.show{opacity:1;pointer-events:all}
 .loading-overlay .spinner{width:36px;height:36px;border:3px solid var(--smoke);border-top-color:var(--terra);border-radius:50%;animation:spin 0.8s linear infinite}
-.config-banner{background:#fff3cd;border:1px solid #ffc107;border-radius:10px;padding:12px 16px;font-size:13px;color:#856404;margin:16px 32px 0;display:none}
-.config-banner.show{display:block}
+
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -235,9 +234,7 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:14px 3
   </div>
 </nav>
 
-<div class="config-banner" id="configBanner">
-  ⚠️ <strong>Configura tus claves</strong> — Edita las variables <code>SUPABASE_URL</code> y <code>SUPABASE_ANON</code> al inicio del archivo para conectar con tu base de datos.
-</div>
+
 
 <!-- ══ VIEW: EXPLORAR ══ -->
 <div class="view active" id="view-explorar">
@@ -479,7 +476,6 @@ let sb;
 
 try {
   if (SUPABASE_URL.includes('TU-PROYECTO') || SUPABASE_ANON.includes('TU-ANON')) {
-    document.getElementById('configBanner').classList.add('show');
     sb = null;
   } else {
     sb = createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -1107,6 +1103,39 @@ async function sendMsg(id) {
 }
 
 // ═══════════════════════════════════════
+// DELETE / LEAVE TRIP
+// ═══════════════════════════════════════
+async function deleteTrip(id) {
+  if (!confirm('¿Seguro que quieres borrar este viaje? Se eliminará para todos los compañeros.')) return;
+  if (sb) {
+    const { error } = await sb.from('trips').delete().eq('id', id);
+    if (error) { showToast('⚠ Error: ' + error.message); return; }
+  }
+  state.trips = state.trips.filter(t => t.id !== id);
+  state.myTripIds = state.myTripIds.filter(x => x !== id);
+  state.joinedTripIds = state.joinedTripIds.filter(x => x !== id);
+  renderMisViajes();
+  renderTrips();
+  renderStats();
+  showToast('🗑 Viaje eliminado');
+}
+
+async function leaveTrip(id) {
+  if (!confirm('¿Seguro que quieres salirte de este viaje?')) return;
+  if (sb) {
+    const { error } = await sb.from('companions').delete().eq('trip_id', id).eq('user_id', state.user.id);
+    if (error) { showToast('⚠ Error: ' + error.message); return; }
+  }
+  state.joinedTripIds = state.joinedTripIds.filter(x => x !== id);
+  const trip = state.trips.find(t => t.id === id);
+  if (trip) trip.companions = trip.companions.filter(c => c.name !== state.profile?.name);
+  renderMisViajes();
+  renderTrips();
+  renderStats();
+  showToast('↩ Has salido del viaje');
+}
+
+// ═══════════════════════════════════════
 // MIS VIAJES
 // ═══════════════════════════════════════
 function renderMisViajes() {
@@ -1137,6 +1166,10 @@ function renderMisViajes() {
         ${isJoined && !isOrg ? '<span class="chip blue">Unido</span>' : ''}
       </div>
       <div style="margin-top:10px;font-size:12px;color:var(--dusk)">${t.companions.length} compañero${t.companions.length!==1?'s':''} · <span style="cursor:pointer;color:var(--sky)" onclick="event.stopPropagation();openChatForTrip('${t.id}')">💬 Chat</span></div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        ${isOrg ? `<button class="action-btn" style="background:#fde8d0;color:#C4622D;font-size:11px" onclick="event.stopPropagation();deleteTrip('${t.id}')">🗑 Borrar viaje</button>` : ''}
+        ${isJoined && !isOrg ? `<button class="action-btn" style="background:var(--smoke);color:var(--dusk);font-size:11px" onclick="event.stopPropagation();leaveTrip('${t.id}')">↩ Salirme</button>` : ''}
+      </div>
     </div>`;
   }).join('')}</div>`;
 }
@@ -1178,3 +1211,4 @@ init();
 </script>
 </body>
 </html>
+
