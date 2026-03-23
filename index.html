@@ -1277,16 +1277,88 @@ async function checkAI(id) {
     <div class="ai-loading">
       <div class="spinner"></div>
       <p style="color:var(--dusk);font-size:13px;margin-top:8px">
-        Analizando compatibilidad con IA...
+        Analizando compatibilidad...
       </p>
     </div>
   `;
   openModal('aiModal');
 
+  const fallback = (reason = '') => {
+    const userInterests = new Set((profile.interests || []).map(i => String(i).toLowerCase().replace(/^[^\w]+/, '')));
+    const tripInterests = new Set((trip.interests || []).map(i => String(i).toLowerCase().replace(/^[^\w]+/, '')));
+    const common = [...userInterests].filter(i => tripInterests.has(i));
+
+    const interestScore = tripInterests.size > 0
+      ? Math.round((common.length / Math.max(userInterests.size || 1, tripInterests.size || 1)) * 40)
+      : 20;
+
+    const styleMap = {
+      'Aventurero': ['Aventura'],
+      'Mochilero': ['Aventura', 'Cultural', 'Gastro'],
+      'Cultural': ['Cultural', 'Gastro'],
+      'Confort': ['Playa', 'Gastro', 'Cultural']
+    };
+
+    const styleMatch = (styleMap[profile.style || 'Mochilero'] || []).includes(trip.type);
+    const styleScore = styleMatch ? 25 : 10;
+    const bioScore = profile.bio ? 15 : 5;
+    const score = Math.min(98, Math.max(45, 30 + interestScore + styleScore + bioScore));
+
+    const pros = [];
+    const cons = [];
+
+    if (common.length > 0) pros.push(`Comparten ${common.length} interés${common.length > 1 ? 'es' : ''}: ${common.slice(0, 2).join(', ')}`);
+    if (styleMatch) pros.push(`Tu estilo "${profile.style}" encaja con viajes de tipo ${trip.type}`);
+    if (profile.bio) pros.push('Tienes perfil completo, generarás más confianza');
+
+    if (common.length === 0) cons.push('No coincidís en intereses declarados');
+    if (!styleMatch) cons.push(`Tu estilo "${profile.style || 'Mochilero'}" puede diferir del viaje`);
+    if (!profile.bio) cons.push('Completa tu bio para generar más confianza');
+
+    const title =
+      score >= 80 ? 'Gran compatibilidad' :
+      score >= 65 ? 'Buena compatibilidad' :
+      score >= 50 ? 'Compatibilidad moderada' :
+      'Compatibilidad básica';
+
+    const summary = common.length > 0
+      ? `Coincidís en ${common.slice(0, 2).join(' y ')}. Vale la pena hablar.`
+      : `Puede encajar, pero conviene aclarar expectativas antes.`;
+
+    document.getElementById('aiContent').innerHTML = `
+      <div style="text-align:center;margin-bottom:20px">
+        <div class="ai-score-circle" style="background:${score >= 80 ? '#4A5E40' : score >= 60 ? '#C4622D' : '#c0392b'}">${score}%</div>
+        <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:6px">${title}</div>
+        <div style="font-size:13px;color:var(--dusk)">${summary}</div>
+      </div>
+
+      <div class="ai-pros-cons">
+        <div class="ai-col">
+          <div class="ai-col-title pro">Puntos a favor</div>
+          <ul>${pros.length ? pros.map(p => `<li>${san(p)}</li>`).join('') : '<li>Sin ventajas claras destacadas.</li>'}</ul>
+        </div>
+        <div class="ai-col">
+          <div class="ai-col-title con">Puntos a vigilar</div>
+          <ul>${cons.length ? cons.map(c => `<li>${san(c)}</li>`).join('') : '<li>Sin riesgos relevantes detectados.</li>'}</ul>
+        </div>
+      </div>
+
+      <div class="ai-consejo">
+        <strong>Consejo:</strong> ${san(reason || 'Resultado local de respaldo. Hablad antes de confirmar para alinear expectativas.')}
+      </div>
+    `;
+  };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+
   try {
+    console.log('[AI] calling /api/ai');
+
     const res = await fetch('/api/ai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
         profile: {
           full_name: profile.full_name || profile.name || '',
@@ -1311,26 +1383,44 @@ async function checkAI(id) {
       })
     });
 
+    clearTimeout(timeout);
+
     const data = await res.json().catch(() => null);
+    console.log('[AI] response', res.status, data);
 
     if (!res.ok || !data) {
       throw new Error(data?.details || data?.error || 'No se pudo obtener respuesta de IA');
     }
 
-    renderAIResult(data);
+    document.getElementById('aiContent').innerHTML = `
+      <div style="text-align:center;margin-bottom:20px">
+        <div class="ai-score-circle" style="background:${(data.score || 0) >= 80 ? '#4A5E40' : (data.score || 0) >= 60 ? '#C4622D' : '#c0392b'}">${data.score || 65}%</div>
+        <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:6px">${san(data.title || 'Compatibilidad moderada')}</div>
+        <div style="font-size:13px;color:var(--dusk)">${san(data.summary || '')}</div>
+      </div>
+
+      <div class="ai-pros-cons">
+        <div class="ai-col">
+          <div class="ai-col-title pro">Puntos a favor</div>
+          <ul>${Array.isArray(data.pros) && data.pros.length ? data.pros.map(p => `<li>${san(p)}</li>`).join('') : '<li>Sin ventajas claras destacadas.</li>'}</ul>
+        </div>
+        <div class="ai-col">
+          <div class="ai-col-title con">Puntos a vigilar</div>
+          <ul>${Array.isArray(data.cons) && data.cons.length ? data.cons.map(c => `<li>${san(c)}</li>`).join('') : '<li>Sin riesgos relevantes detectados.</li>'}</ul>
+        </div>
+      </div>
+
+      <div class="ai-consejo">
+        <strong>Consejo:</strong> ${san(data.advice || 'Hablad antes de confirmar para alinear expectativas.')}
+      </div>
+    `;
   } catch (err) {
-    console.error('AI error:', err);
-    renderLocalAIFallback(profile, trip, err?.message || '');
-    showToast('⚠ Gemini no respondió. Mostrando análisis local.');
+    clearTimeout(timeout);
+    console.error('[AI] error', err);
+    fallback(err?.name === 'AbortError' ? 'La IA tardó demasiado. Mostrando análisis local.' : `No se pudo consultar la IA. ${err?.message || ''}`);
+    showToast('⚠ No se pudo consultar la IA. Mostrando análisis local.');
   }
 }
-  
-  // Intereses en común
-  const common = [...userInterests].filter(i => tripInterests.has(i));
-  const interestScore = tripInterests.size > 0 
-    ? Math.round((common.length / Math.max(userInterests.size, tripInterests.size)) * 40)
-    : 20;
-
   // Compatibilidad de estilo con tipo de viaje
   const styleMap = {
     'Aventurero': ['Aventura'], 'Mochilero': ['Aventura','Cultural','Gastro'],
